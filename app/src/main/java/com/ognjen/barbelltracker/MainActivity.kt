@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         detectButton = findViewById(R.id.detectButton)
 
         // Initialize tracker
-        tracker = Tracker(this, "best_float16.tflite", this)
+        tracker = Tracker(this, "best_float32.tflite", this)
 
         // Set button click listeners
         loadFromGalleryButton.setOnClickListener {
@@ -73,11 +73,42 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     }
 
     override fun onTrack(boundingBox: BoundingBox, inferenceTime: Long) {
-        val bboxText = "x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}"
+        // Get original image dimensions
+        val drawable = originalImageView.drawable as? BitmapDrawable
+        val bitmap = drawable?.bitmap ?: return
+        val origWidth = bitmap.width
+        val origHeight = bitmap.height
+
+        // Convert normalized coordinates to absolute pixels for display
+        val x1Pixels = boundingBox.x1 * origWidth
+        val y1Pixels = boundingBox.y1 * origHeight
+        val x2Pixels = boundingBox.x2 * origWidth
+        val y2Pixels = boundingBox.y2 * origHeight
+
+        // Display both normalized and pixel values for debugging
+        val bboxText = """
+        Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)}, 
+                   x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
+        Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, 
+               x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
+        Confidence: ${boundingBox.cnf.format(4)}
+        Inference time: $inferenceTime ms
+    """.trimIndent()
+
         boundingBoxTextView.text = bboxText
-        Log.d("BarbelltrackerLog", "Detection success: $bboxText, Inference time: $inferenceTime ms")
+
+        Log.d("BarbelltrackerLog", """
+        Detection success:
+        Normalized: x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}
+        Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
+        Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms
+    """.trimIndent())
+
         Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
+
+        // todo draw bounding box on processedImageView
     }
+
 
     override fun onNoTrack() {
         boundingBoxTextView.text = "No object detected"
@@ -88,4 +119,6 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         super.onDestroy()
         tracker.close()
     }
+
+    fun Float.format(digits: Int) = "%.${digits}f".format(this)
 }

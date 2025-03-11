@@ -141,6 +141,6 @@ class Tracker(
         private const val ERRORTAG = "BarbelltrackerError"
         private const val INPUT_MEAN = 0f
         private const val INPUT_STANDARD_DEVIATION = 255f
-        private const val CONFIDENCE_THRESHOLD = 0.3F
+        private const val CONFIDENCE_THRESHOLD = 0.03F
     }
 }
