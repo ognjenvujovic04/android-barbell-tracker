@@ -1,6 +1,5 @@
 package com.ognjen.barbelltracker
 
-import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -72,7 +71,9 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         tracker.detect(bitmap)
     }
 
-    override fun onTrack(boundingBox: BoundingBox, inferenceTime: Long) {
+    override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
+        val boundingBox= boundingBoxes[0]
+
         // Get original image dimensions
         val drawable = originalImageView.drawable as? BitmapDrawable
         val bitmap = drawable?.bitmap ?: return
@@ -110,7 +111,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     }
 
 
-    override fun onNoTrack() {
+    override fun onEmptyDetect() {
         boundingBoxTextView.text = "No object detected"
         Log.d("BarbelltrackerLog", "No object detected")
     }
