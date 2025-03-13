@@ -72,7 +72,12 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     }
 
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
-        val boundingBox= boundingBoxes[0]
+        if (boundingBoxes.isEmpty()) {
+            onEmptyDetect()
+            return
+        }
+
+        val boundingBox = boundingBoxes[0]
 
         // Get original image dimensions
         val drawable = originalImageView.drawable as? BitmapDrawable
@@ -105,14 +110,21 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms
     """.trimIndent())
 
-        Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
+        // Draw bounding box and center point on the image
+        val processedBitmap = DetectionDrawer.drawDetection(bitmap, boundingBox)
+        Log.d("BarbelltrackerLog", "Drawing bounding box and center point")
 
-        // todo draw bounding box on processedImageView
+        // Display the processed image
+        processedImageView.setImageBitmap(processedBitmap)
+
+        Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
+        Log.d("BarbelltrackerLog", "Detection success")
     }
 
 
+
     override fun onEmptyDetect() {
-        boundingBoxTextView.text = "No object detected"
+        "No object detected".also { boundingBoxTextView.text = it }
         Log.d("BarbelltrackerLog", "No object detected")
     }
 
@@ -121,5 +133,5 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         tracker.close()
     }
 
-    fun Float.format(digits: Int) = "%.${digits}f".format(this)
+    private fun Float.format(digits: Int) = "%.${digits}f".format(this)
 }
