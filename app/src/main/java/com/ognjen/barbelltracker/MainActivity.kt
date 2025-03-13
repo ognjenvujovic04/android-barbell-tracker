@@ -1,6 +1,5 @@
 package com.ognjen.barbelltracker
 
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -8,13 +7,14 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
-    private lateinit var originalImageView: ImageView
+    private lateinit var originalVideoView: VideoView
     private lateinit var processedImageView: ImageView
     private lateinit var boundingBoxTextView: TextView
     private lateinit var loadFromGalleryButton: Button
@@ -24,10 +24,11 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
             Log.d(TAG, "Selected URI: $uri")
-            originalImageView.setImageURI(uri) // Set the image to the ImageView
+            originalVideoView.setVideoURI(uri) // Set the video to the VideoView
+            originalVideoView.start() // Start playing the video
         } else {
             Log.d(TAG, "No media selected")
-            Toast.makeText(this, "No image selected", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -36,7 +37,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         setContentView(R.layout.activity_main)
 
         // Initialize views
-        originalImageView = findViewById(R.id.originalImageView)
+        originalVideoView = findViewById(R.id.originalVideoView)
         processedImageView = findViewById(R.id.processedImageView)
         boundingBoxTextView = findViewById(R.id.boundingBoxTextView)
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
@@ -51,14 +52,18 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         }
 
         detectButton.setOnClickListener {
-            processImage()
+            // Comment out the image processing functionality for now
+            // processImage()
+            Toast.makeText(this, "Video processing not implemented yet", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun openGallery() {
-        pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
     }
 
+    // Comment out the image processing functionality for now
+    /*
     private fun processImage() {
         val drawable = originalImageView.drawable as? BitmapDrawable
         val bitmap = drawable?.bitmap
@@ -70,8 +75,11 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         tracker.detect(bitmap)
     }
+    */
 
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
+        // Comment out the image processing functionality for now
+        /*
         if (boundingBoxes.isEmpty()) {
             onEmptyDetect()
             return
@@ -93,9 +101,9 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         // Display both normalized and pixel values for debugging
         val bboxText = """
-        Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)}, 
+        Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
                    x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
-        Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, 
+        Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()},
                x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
         Confidence: ${boundingBox.cnf.format(4)}
         Inference time: $inferenceTime ms
@@ -119,9 +127,8 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
         Log.d(TAG, "Detection success")
+        */
     }
-
-
 
     override fun onEmptyDetect() {
         "No object detected".also { boundingBoxTextView.text = it }
@@ -138,5 +145,5 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     companion object {
         private const val TAG = "BarbelltrackerLog"
         private const val ERRORTAG = "BarbelltrackerError"
-        }
+    }
 }

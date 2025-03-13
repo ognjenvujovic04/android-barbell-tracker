@@ -48,18 +48,17 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Original Image"
+            android:text="Original Video"
             android:textStyle="bold"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="8dp" />
 
-        <ImageView
-            android:id="@+id/originalImageView"
+        <VideoView
+            android:id="@+id/originalVideoView"
             android:layout_width="match_parent"
             android:layout_height="250dp"
             android:scaleType="fitCenter"
-            android:background="#DDDDDD"
-            android:contentDescription="Original image" />
+            android:contentDescription="Original video" />
 
         <TextView
             android:layout_width="match_parent"
