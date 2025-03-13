@@ -1,5 +1,7 @@
 package com.ognjen.barbelltracker
 
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -20,10 +22,12 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     private lateinit var loadFromGalleryButton: Button
     private lateinit var detectButton: Button
     private lateinit var tracker: Tracker
+    private var selectedVideoUri: Uri? = null
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
             Log.d(TAG, "Selected URI: $uri")
+            selectedVideoUri = uri
             originalVideoView.setVideoURI(uri) // Set the video to the VideoView
             originalVideoView.start() // Start playing the video
         } else {
@@ -52,9 +56,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         }
 
         detectButton.setOnClickListener {
-            // Comment out the image processing functionality for now
-            // processImage()
-            Toast.makeText(this, "Video processing not implemented yet", Toast.LENGTH_SHORT).show()
+            processVideo()
         }
     }
 
@@ -62,24 +64,38 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
     }
 
-    // Comment out the image processing functionality for now
-    /*
-    private fun processImage() {
-        val drawable = originalImageView.drawable as? BitmapDrawable
-        val bitmap = drawable?.bitmap
-
-        if (bitmap == null) {
-            Toast.makeText(this, "No image selected", Toast.LENGTH_SHORT).show()
+    private fun processVideo() {
+        if (selectedVideoUri == null) {
+            Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
             return
         }
 
-        tracker.detect(bitmap)
+        try {
+            // Extract the first frame from the video
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(this, selectedVideoUri)
+
+            // Get the first frame (time 0) and ensure it's in ARGB_8888 format
+            val firstFrameBitmap = retriever.getFrameAtTime(0)?.copy(Bitmap.Config.ARGB_8888, true)
+
+            if (firstFrameBitmap == null) {
+                Toast.makeText(this, "Failed to extract video frame", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            // Release the retriever
+            retriever.release()
+
+            // Process the extracted frame
+            tracker.detect(firstFrameBitmap)
+
+        } catch (e: Exception) {
+            Log.e(ERRORTAG, "Error processing video: ${e.message}", e)
+            Toast.makeText(this, "Error processing video: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
-    */
 
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
-        // Comment out the image processing functionality for now
-        /*
         if (boundingBoxes.isEmpty()) {
             onEmptyDetect()
             return
@@ -87,9 +103,13 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         val boundingBox = boundingBoxes[0]
 
-        // Get original image dimensions
-        val drawable = originalImageView.drawable as? BitmapDrawable
-        val bitmap = drawable?.bitmap ?: return
+        // Get the first frame again for display, ensuring it's in ARGB_8888 format
+        val retriever = MediaMetadataRetriever()
+        retriever.setDataSource(this, selectedVideoUri)
+        val bitmap = retriever.getFrameAtTime(0)?.copy(Bitmap.Config.ARGB_8888, true) ?: return
+        retriever.release()
+
+        // Convert normalized coordinates to absolute pixels for display
         val origWidth = bitmap.width
         val origHeight = bitmap.height
 
@@ -127,7 +147,6 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
         Log.d(TAG, "Detection success")
-        */
     }
 
     override fun onEmptyDetect() {
