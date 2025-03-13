@@ -23,10 +23,10 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
-            Log.d("BarbelltrackerLog", "Selected URI: $uri")
+            Log.d(TAG, "Selected URI: $uri")
             originalImageView.setImageURI(uri) // Set the image to the ImageView
         } else {
-            Log.d("BarbelltrackerLog", "No media selected")
+            Log.d(TAG, "No media selected")
             Toast.makeText(this, "No image selected", Toast.LENGTH_SHORT).show()
         }
     }
@@ -103,7 +103,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         boundingBoxTextView.text = bboxText
 
-        Log.d("BarbelltrackerLog", """
+        Log.d(TAG, """
         Detection success:
         Normalized: x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}
         Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
@@ -112,20 +112,20 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         // Draw bounding box and center point on the image
         val processedBitmap = DetectionDrawer.drawDetection(bitmap, boundingBox)
-        Log.d("BarbelltrackerLog", "Drawing bounding box and center point")
+        Log.d(TAG, "Drawing bounding box and center point")
 
         // Display the processed image
         processedImageView.setImageBitmap(processedBitmap)
 
         Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
-        Log.d("BarbelltrackerLog", "Detection success")
+        Log.d(TAG, "Detection success")
     }
 
 
 
     override fun onEmptyDetect() {
         "No object detected".also { boundingBoxTextView.text = it }
-        Log.d("BarbelltrackerLog", "No object detected")
+        Log.d(TAG, "No object detected")
     }
 
     override fun onDestroy() {
@@ -134,4 +134,9 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     }
 
     private fun Float.format(digits: Int) = "%.${digits}f".format(this)
+
+    companion object {
+        private const val TAG = "BarbelltrackerLog"
+        private const val ERRORTAG = "BarbelltrackerError"
+        }
 }
