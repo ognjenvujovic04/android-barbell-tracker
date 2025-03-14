@@ -101,7 +101,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
             return
         }
 
-        val boundingBox = boundingBoxes[0]
+        val firstBox = boundingBoxes[0]
 
         // Get the first frame again for display, ensuring it's in ARGB_8888 format
         val retriever = MediaMetadataRetriever()
@@ -113,33 +113,46 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         val origWidth = bitmap.width
         val origHeight = bitmap.height
 
-        // Convert normalized coordinates to absolute pixels for display
-        val x1Pixels = boundingBox.x1 * origWidth
-        val y1Pixels = boundingBox.y1 * origHeight
-        val x2Pixels = boundingBox.x2 * origWidth
-        val y2Pixels = boundingBox.y2 * origHeight
+        // StringBuilder to accumulate all detections for display in the text box
+        val detectionTextBuilder = StringBuilder()
 
-        // Display both normalized and pixel values for debugging
-        val bboxText = """
-        Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
-                   x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
-        Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()},
-               x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
-        Confidence: ${boundingBox.cnf.format(4)}
-        Inference time: $inferenceTime ms
-    """.trimIndent()
+        // Log and display each detection with enumeration
+        boundingBoxes.forEachIndexed { index, boundingBox ->
+            // Convert normalized coordinates to absolute pixels for display
+            val x1Pixels = boundingBox.x1 * origWidth
+            val y1Pixels = boundingBox.y1 * origHeight
+            val x2Pixels = boundingBox.x2 * origWidth
+            val y2Pixels = boundingBox.y2 * origHeight
 
-        boundingBoxTextView.text = bboxText
+            // Format the detection information
+            val bboxText = """
+            Detection ${index + 1}:
+            Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
+                       x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
+            Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()},
+                   x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
+            Confidence: ${boundingBox.cnf.format(4)}
+            Inference time: $inferenceTime ms
+            --------------------------
+        """.trimIndent()
 
-        Log.d(TAG, """
-        Detection success:
-        Normalized: x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}
-        Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
-        Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms
-    """.trimIndent())
+            // Append to the StringBuilder for display
+            detectionTextBuilder.append(bboxText).append("\n")
+
+            // Log the detection
+            Log.d(TAG, """
+            Detection ${index + 1} success:
+            Normalized: x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}
+            Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
+            Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms
+        """.trimIndent())
+        }
+
+        // Display all detections in the text box
+        boundingBoxTextView.text = detectionTextBuilder.toString()
 
         // Draw bounding box and center point on the image
-        val processedBitmap = DetectionDrawer.drawDetection(bitmap, boundingBox)
+        val processedBitmap = DetectionDrawer.drawDetection(bitmap, firstBox)
         Log.d(TAG, "Drawing bounding box and center point")
 
         // Display the processed image
