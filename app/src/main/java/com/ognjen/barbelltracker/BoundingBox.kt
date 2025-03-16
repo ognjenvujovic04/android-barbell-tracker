@@ -11,5 +11,6 @@ data class BoundingBox(
     val h: Float,   // Height
     val cnf: Float,  // Confidence score
     val cls: Int,    // Class index
-    val clsName: String  // Class name
+    val clsName: String,  // Class name
+    val id: Int = -1  // Unique ID or -1 if not set
 )
