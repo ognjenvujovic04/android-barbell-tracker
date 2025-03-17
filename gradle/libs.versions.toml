@@ -17,6 +17,7 @@ litertSupportApi = "1.1.2"
 
 
 [libraries]
+opencv = { group = "com.quickbirdstudios", name = "opencv", version = "4.5.3.0" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version = "1.6.1" }
 androidx-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 
