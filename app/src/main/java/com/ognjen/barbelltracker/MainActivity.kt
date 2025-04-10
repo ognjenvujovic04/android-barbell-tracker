@@ -25,18 +25,6 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     private lateinit var tracker: Tracker
     private var selectedVideoUri: Uri? = null
 
-    private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
-        if (uri != null) {
-            Log.d(TAG, "Selected URI: $uri")
-            selectedVideoUri = uri
-            originalVideoView.setVideoURI(uri) // Set the video to the VideoView
-            originalVideoView.start() // Start playing the video
-        } else {
-            Log.d(TAG, "No media selected")
-            Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -50,7 +38,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         // Initialize views
         originalVideoView = findViewById(R.id.originalVideoView)
-        processedImageView = findViewById(R.id.processedImageView)
+        processedImageView = findViewById(R.id.processedVideoView)
         boundingBoxTextView = findViewById(R.id.boundingBoxTextView)
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
         detectButton = findViewById(R.id.detectButton)
@@ -65,6 +53,17 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         detectButton.setOnClickListener {
             processVideo()
+        }
+    }
+
+    private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        if (uri != null) {
+            Log.d(TAG, "Selected URI: $uri")
+            selectedVideoUri = uri
+            originalVideoView.setVideoURI(uri) // Set the video to the VideoView
+        } else {
+            Log.d(TAG, "No media selected")
+            Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
         }
     }
 
