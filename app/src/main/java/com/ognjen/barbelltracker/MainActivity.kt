@@ -13,6 +13,7 @@ import android.widget.VideoView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import org.opencv.android.OpenCVLoader
 
 class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
@@ -39,6 +40,13 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Try to load OpenCV
+        if (!OpenCVLoader.initDebug()) {
+            Log.d(ERRORTAG, "Unable to load OpenCV")
+        } else {
+            Log.d(TAG, "OpenCV loaded")
+        }
 
         // Initialize views
         originalVideoView = findViewById(R.id.originalVideoView)
@@ -133,6 +141,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
                    x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
             Confidence: ${boundingBox.cnf.format(4)}
             Inference time: $inferenceTime ms
+            ID: ${boundingBox.id}
             --------------------------
         """.trimIndent()
 
@@ -144,7 +153,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
             Detection ${index + 1} success:
             Normalized: x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}
             Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
-            Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms
+            Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms, ID: ${boundingBox.id}
         """.trimIndent())
         }
 
