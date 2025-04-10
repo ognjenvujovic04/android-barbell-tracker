@@ -102,7 +102,7 @@ public class KalmanTracker {
 
     }
 
-    Rect predict(){
+    public Rect predict(){
         Mat p = kf.predict();
 //        System.out.println(" p "+ p.dump());
         m_age += 1;
@@ -114,7 +114,7 @@ public class KalmanTracker {
         return m_history.get(m_history.size()-1);
     }
 
-    void update(Rect stateMat){
+    public void update(Rect stateMat){
         m_time_since_update = 0;
         m_history.clear();
         m_hits += 1;
