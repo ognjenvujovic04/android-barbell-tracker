@@ -99,7 +99,6 @@ class Tracker(
         }
 
         var inferenceTime = SystemClock.uptimeMillis()
-        Log.d(TAG, "Starting detection")
 
         val resizedBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
 
@@ -114,7 +113,6 @@ class Tracker(
         // Get detected boxes from YOLO model
         val detectedBoxes = bestBox(output.floatArray)
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-        Log.d(TAG, "Inference time: $inferenceTime ms")
 
         if (detectedBoxes.isNullOrEmpty()) {
             // Update trackers with no detections
@@ -333,7 +331,6 @@ class Tracker(
     }
 
     private fun applyNMS(boxes: List<BoundingBox>) : MutableList<BoundingBox> {
-        Log.d(TAG, "Applying NMS")
         val sortedBoxes = boxes.sortedByDescending { it.cnf }.toMutableList()
         val selectedBoxes = mutableListOf<BoundingBox>()
 
