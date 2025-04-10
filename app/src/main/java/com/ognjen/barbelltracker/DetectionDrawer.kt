@@ -4,9 +4,10 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 
 /**
- * Utility class for drawing bounding boxes and markers on images after object detection
+ * Utility class for drawing bounding boxes, markers, and IDs on images after object detection
  */
 class DetectionDrawer {
 
@@ -35,6 +36,16 @@ class DetectionDrawer {
                 isAntiAlias = true
             }
 
+            // Set up paint for ID text
+            val textPaint = Paint().apply {
+                color = Color.RED
+                style = Paint.Style.FILL
+                textSize = 40f
+                typeface = Typeface.DEFAULT_BOLD
+                isAntiAlias = true
+                setShadowLayer(4f, 2f, 2f, Color.BLACK)
+            }
+
             // Draw each bounding box
             for (boundingBox in boundingBoxes) {
                 val x1 = boundingBox.x1 * imageWidth
@@ -52,6 +63,12 @@ class DetectionDrawer {
                 // Draw center dot
                 val dotRadius = 10f
                 canvas.drawCircle(centerX, centerY, dotRadius, dotPaint)
+
+                // Draw ID text (using index + 1 to start from 1 instead of 0)
+                val id = boundingBox.id
+                val textX = x1 + 10 // Small offset from left edge
+                val textY = y1 - 10 // Small offset above top edge
+                canvas.drawText("ID: $id", textX, textY, textPaint)
             }
 
             return resultBitmap
