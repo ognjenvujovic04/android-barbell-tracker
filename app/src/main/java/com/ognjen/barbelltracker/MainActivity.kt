@@ -4,12 +4,13 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import android.widget.VideoView
+import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -18,12 +19,22 @@ import org.opencv.android.OpenCVLoader
 class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
     private lateinit var originalVideoView: VideoView
-    private lateinit var processedImageView: ImageView
+    private lateinit var processedVideoView: VideoView
+    private lateinit var overlayView: OverlayView
     private lateinit var boundingBoxTextView: TextView
     private lateinit var loadFromGalleryButton: Button
     private lateinit var detectButton: Button
     private lateinit var tracker: Tracker
     private var selectedVideoUri: Uri? = null
+
+    // For frame extraction and processing
+    private lateinit var retriever: MediaMetadataRetriever
+    private val handler = Handler(Looper.getMainLooper())
+    private var frameExtractorRunnable: Runnable? = null
+    private var isProcessingVideo = false
+    private var videoDuration = 0L
+    private var currentPosition = 0L
+    private val frameInterval = 100L // Extract frame every 100ms
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,7 +49,8 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
 
         // Initialize views
         originalVideoView = findViewById(R.id.originalVideoView)
-        processedImageView = findViewById(R.id.processedVideoView)
+        processedVideoView = findViewById(R.id.processedVideoView)
+        overlayView = findViewById(R.id.overlay)
         boundingBoxTextView = findViewById(R.id.boundingBoxTextView)
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
         detectButton = findViewById(R.id.detectButton)
@@ -52,7 +64,23 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         }
 
         detectButton.setOnClickListener {
-            processVideo()
+            processVideoRealtime()
+        }
+
+        // Setup video completion listener
+        originalVideoView.setOnCompletionListener {
+            // Reset video if we're processing frames
+            if (isProcessingVideo) {
+                originalVideoView.start()
+            }
+        }
+
+        processedVideoView.setOnCompletionListener {
+            // Reset video if we're processing frames
+            if (isProcessingVideo) {
+                processedVideoView.start()
+                currentPosition = 0
+            }
         }
     }
 
@@ -60,7 +88,24 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         if (uri != null) {
             Log.d(TAG, "Selected URI: $uri")
             selectedVideoUri = uri
-            originalVideoView.setVideoURI(uri) // Set the video to the VideoView
+
+            // Stop any ongoing processing
+            stopVideoProcessing()
+
+            // Set the video to both VideoViews
+            originalVideoView.setVideoURI(uri)
+            processedVideoView.setVideoURI(uri)
+
+            // Clear overlay
+            overlayView.clear()
+
+            // Initialize retriever
+            retriever = MediaMetadataRetriever()
+            retriever.setDataSource(this, uri)
+
+            // Get video duration
+            val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            videoDuration = durationString?.toLong() ?: 0L
         } else {
             Log.d(TAG, "No media selected")
             Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
@@ -71,35 +116,95 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
     }
 
-    private fun processVideo() {
+    private fun processVideoRealtime() {
         if (selectedVideoUri == null) {
             Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
             return
         }
 
+        // If already processing, stop
+        if (isProcessingVideo) {
+            stopVideoProcessing()
+            detectButton.text = "Detect"
+            return
+        }
+
         try {
-            // Extract the first frame from the video
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(this, selectedVideoUri)
+            // Start both videos
+            originalVideoView.start()
+            processedVideoView.start()
 
-            // Get the first frame (time 0) and ensure it's in ARGB_8888 format
-            val firstFrameBitmap = retriever.getFrameAtTime(0)?.copy(Bitmap.Config.ARGB_8888, true)
+            // Change button text
+            detectButton.text = "Stop"
 
-            if (firstFrameBitmap == null) {
-                Toast.makeText(this, "Failed to extract video frame", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            // Release the retriever
-            retriever.release()
-
-            // Process the extracted frame
-            tracker.detect(firstFrameBitmap)
+            // Start frame extraction
+            isProcessingVideo = true
+            currentPosition = 0
+            startFrameExtraction()
 
         } catch (e: Exception) {
             Log.e(ERRORTAG, "Error processing video: ${e.message}", e)
             Toast.makeText(this, "Error processing video: ${e.message}", Toast.LENGTH_SHORT).show()
+            stopVideoProcessing()
         }
+    }
+
+    private fun startFrameExtraction() {
+        frameExtractorRunnable = object : Runnable {
+            override fun run() {
+                if (!isProcessingVideo || currentPosition > videoDuration) {
+                    return
+                }
+
+                try {
+                    // Get frame at current position
+                    val timeMicrosec = currentPosition * 1000 // Convert to microseconds
+                    val frameBitmap = retriever.getFrameAtTime(timeMicrosec,
+                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.copy(Bitmap.Config.ARGB_8888, true)
+
+                    if (frameBitmap != null) {
+                        // Process frame with tracker
+                        tracker.detect(frameBitmap)
+                    }
+
+                    // Update current position
+                    currentPosition += frameInterval
+
+                    // Schedule next frame extraction
+                    handler.postDelayed(this, frameInterval)
+
+                } catch (e: Exception) {
+                    Log.e(ERRORTAG, "Error extracting frame: ${e.message}", e)
+                }
+            }
+        }
+
+        // Start the frame extraction process
+        handler.post(frameExtractorRunnable!!)
+    }
+
+    private fun stopVideoProcessing() {
+        isProcessingVideo = false
+
+        // Remove callbacks
+        frameExtractorRunnable?.let {
+            handler.removeCallbacks(it)
+        }
+
+        // Release retriever if initialized
+        if (::retriever.isInitialized) {
+            retriever.release()
+        }
+
+        // Stop videos
+        originalVideoView.stopPlayback()
+        processedVideoView.stopPlayback()
+
+        // Clear overlay
+        overlayView.clear()
+
+        // Reset button text
+        detectButton.text = "Detect"
     }
 
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
@@ -108,74 +213,51 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
             return
         }
 
-        // Get the first frame again for display, ensuring it's in ARGB_8888 format
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(this, selectedVideoUri)
-        val bitmap = retriever.getFrameAtTime(0)?.copy(Bitmap.Config.ARGB_8888, true) ?: return
-        retriever.release()
+        // Update the overlay with detected bounding boxes
+        runOnUiThread {
+            overlayView.setResults(boundingBoxes)
 
-        // Convert normalized coordinates to absolute pixels for display
-        val origWidth = bitmap.width
-        val origHeight = bitmap.height
+            // StringBuilder to accumulate all detections for display in the text box
+            val detectionTextBuilder = StringBuilder()
 
-        // StringBuilder to accumulate all detections for display in the text box
-        val detectionTextBuilder = StringBuilder()
+            // Log and display each detection with enumeration
+            boundingBoxes.forEachIndexed { index, boundingBox ->
+                // Format the detection information
+                val bboxText = """
+                Detection ${index + 1}:
+                Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
+                           x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
+                Confidence: ${boundingBox.cnf.format(4)}
+                Inference time: $inferenceTime ms
+                ID: ${boundingBox.id}
+                --------------------------
+                """.trimIndent()
 
-        // Log and display each detection with enumeration
-        boundingBoxes.forEachIndexed { index, boundingBox ->
-            // Convert normalized coordinates to absolute pixels for display
-            val x1Pixels = boundingBox.x1 * origWidth
-            val y1Pixels = boundingBox.y1 * origHeight
-            val x2Pixels = boundingBox.x2 * origWidth
-            val y2Pixels = boundingBox.y2 * origHeight
+                // Append to the StringBuilder for display
+                detectionTextBuilder.append(bboxText).append("\n")
+            }
 
-            // Format the detection information
-            val bboxText = """
-            Detection ${index + 1}:
-            Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
-                       x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
-            Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()},
-                   x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
-            Confidence: ${boundingBox.cnf.format(4)}
-            Inference time: $inferenceTime ms
-            ID: ${boundingBox.id}
-            --------------------------
-        """.trimIndent()
-
-            // Append to the StringBuilder for display
-            detectionTextBuilder.append(bboxText).append("\n")
-
-            // Log the detection
-            Log.d(TAG, """
-            Detection ${index + 1} success:
-            Normalized: x1: ${boundingBox.x1}, y1: ${boundingBox.y1}, x2: ${boundingBox.x2}, y2: ${boundingBox.y2}
-            Pixels: x1: ${x1Pixels.toInt()}, y1: ${y1Pixels.toInt()}, x2: ${x2Pixels.toInt()}, y2: ${y2Pixels.toInt()}
-            Confidence: ${boundingBox.cnf}, Inference time: $inferenceTime ms, ID: ${boundingBox.id}
-        """.trimIndent())
+            // Display all detections in the text box
+            boundingBoxTextView.text = detectionTextBuilder.toString()
         }
-
-        // Display all detections in the text box
-        boundingBoxTextView.text = detectionTextBuilder.toString()
-
-        // Draw bounding boxes and center points on the image
-        val processedBitmap = DetectionDrawer.drawDetections(bitmap, boundingBoxes)
-        Log.d(TAG, "Drawing bounding box and center point")
-
-        // Display the processed image
-        processedImageView.setImageBitmap(processedBitmap)
-
-        Toast.makeText(this, "Detection success", Toast.LENGTH_SHORT).show()
-        Log.d(TAG, "Detection success")
     }
 
     override fun onEmptyDetect() {
-        "No object detected".also { boundingBoxTextView.text = it }
-        Log.d(TAG, "No object detected")
+        runOnUiThread {
+            "No object detected".also { boundingBoxTextView.text = it }
+            overlayView.clear()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        stopVideoProcessing()
         tracker.close()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopVideoProcessing()
     }
 
     private fun Float.format(digits: Int) = "%.${digits}f".format(this)
