@@ -109,8 +109,6 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
             return
         }
 
-        val firstBox = boundingBoxes[0]
-
         // Get the first frame again for display, ensuring it's in ARGB_8888 format
         val retriever = MediaMetadataRetriever()
         retriever.setDataSource(this, selectedVideoUri)
@@ -160,8 +158,8 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         // Display all detections in the text box
         boundingBoxTextView.text = detectionTextBuilder.toString()
 
-        // Draw bounding box and center point on the image
-        val processedBitmap = DetectionDrawer.drawDetection(bitmap, firstBox)
+        // Draw bounding boxes and center points on the image
+        val processedBitmap = DetectionDrawer.drawDetections(bitmap, boundingBoxes)
         Log.d(TAG, "Drawing bounding box and center point")
 
         // Display the processed image

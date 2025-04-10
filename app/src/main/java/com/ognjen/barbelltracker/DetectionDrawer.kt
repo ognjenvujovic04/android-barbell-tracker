@@ -11,7 +11,7 @@ import android.graphics.Paint
 class DetectionDrawer {
 
     companion object {
-        fun drawDetection(originalBitmap: Bitmap, boundingBox: BoundingBox): Bitmap {
+        fun drawDetections(originalBitmap: Bitmap, boundingBoxes: List<BoundingBox>): Bitmap {
             // Create a mutable copy of the original bitmap to draw on
             val resultBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(resultBitmap)
@@ -19,15 +19,6 @@ class DetectionDrawer {
             // Convert normalized coordinates to actual pixel positions
             val imageWidth = originalBitmap.width
             val imageHeight = originalBitmap.height
-
-            val x1 = boundingBox.x1 * imageWidth
-            val y1 = boundingBox.y1 * imageHeight
-            val x2 = boundingBox.x2 * imageWidth
-            val y2 = boundingBox.y2 * imageHeight
-
-            // Calculate center point of bounding box
-            val centerX = (x1 + x2) / 2
-            val centerY = (y1 + y2) / 2
 
             // Set up paint for rectangle
             val boxPaint = Paint().apply {
@@ -44,12 +35,24 @@ class DetectionDrawer {
                 isAntiAlias = true
             }
 
-            // Draw rectangle
-            canvas.drawRect(x1, y1, x2, y2, boxPaint)
+            // Draw each bounding box
+            for (boundingBox in boundingBoxes) {
+                val x1 = boundingBox.x1 * imageWidth
+                val y1 = boundingBox.y1 * imageHeight
+                val x2 = boundingBox.x2 * imageWidth
+                val y2 = boundingBox.y2 * imageHeight
 
-            // Draw center dot
-            val dotRadius = 10f
-            canvas.drawCircle(centerX, centerY, dotRadius, dotPaint)
+                // Calculate center point of bounding box
+                val centerX = (x1 + x2) / 2
+                val centerY = (y1 + y2) / 2
+
+                // Draw rectangle
+                canvas.drawRect(x1, y1, x2, y2, boxPaint)
+
+                // Draw center dot
+                val dotRadius = 10f
+                canvas.drawCircle(centerX, centerY, dotRadius, dotPaint)
+            }
 
             return resultBitmap
         }
