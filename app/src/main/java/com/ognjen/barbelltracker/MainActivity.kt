@@ -1,5 +1,6 @@
 package com.ognjen.barbelltracker
 
+import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -116,6 +117,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
     }
 
+    @SuppressLint("SetTextI18n")
     private fun processVideoRealtime() {
         if (selectedVideoUri == null) {
             Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
@@ -183,6 +185,7 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         handler.post(frameExtractorRunnable!!)
     }
 
+    @SuppressLint("SetTextI18n")
     private fun stopVideoProcessing() {
         isProcessingVideo = false
 
