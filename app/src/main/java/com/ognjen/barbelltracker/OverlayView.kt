@@ -38,7 +38,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
         textPaint.color = Color.WHITE
         textPaint.style = Paint.Style.FILL
-        textPaint.textSize = 50f
+        textPaint.textSize = 40f
 
         boxPaint.color = ContextCompat.getColor(context!!, R.color.bounding_box_color)
         boxPaint.strokeWidth = 8F
@@ -55,7 +55,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             val bottom = it.y2 * height
 
             canvas.drawRect(left, top, right, bottom, boxPaint)
-            val drawableText = it.clsName
+            val drawableText = "ID: " + it.id.toString()
 
             textBackgroundPaint.getTextBounds(drawableText, 0, drawableText.length, bounds)
             val textWidth = bounds.width()
