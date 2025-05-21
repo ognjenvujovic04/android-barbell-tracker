@@ -13,14 +13,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * A class that processes videos to track barbell paths using the Tracker class.
+ * A class that processes videos to track barbell paths using the BarbellDetector class.
  * It extracts frames from a video at the video's native frame rate, processes them
  * with object detection, and stores tracking data in a timestamp-based map for efficient playback.
  */
 class VideoProcessor(
     private val context: Context,
     private val modelPath: String
-) : Tracker.TrackerListener {
+) : BarbellDetector.DetectionListener {
 
     // For frame extraction
     private lateinit var retriever: MediaMetadataRetriever
@@ -36,6 +36,7 @@ class VideoProcessor(
     private var processedFrames: Int = 0
     private var totalFramesToProcess: Int = 0
     private var frameIntervalMs: Long = 100L
+    private var currentTimestamp: Long = 0L
 
     // Progress tracking and callbacks
     private val _progressLiveData = MutableLiveData<Int>()
@@ -44,8 +45,8 @@ class VideoProcessor(
     private val _processingStatusLiveData = MutableLiveData<ProcessingStatus>()
     val processingStatusLiveData: LiveData<ProcessingStatus> = _processingStatusLiveData
 
-    // Tracker instance
-    private var tracker: Tracker? = null
+    // BarbellDetector instance
+    private var detector: BarbellDetector? = null
 
     /**
      * Process a video file and extract barbell tracking data at the video's native frame rate
@@ -66,9 +67,9 @@ class VideoProcessor(
         _processingStatusLiveData.postValue(ProcessingStatus.STARTING)
 
         try {
-            // Initialize tracker if needed
-            if (tracker == null) {
-                tracker = Tracker(context, modelPath, this)
+            // Initialize detector if needed
+            if (detector == null) {
+                detector = BarbellDetector(context, modelPath, this)
             }
 
             // Initialize media retriever
@@ -119,32 +120,48 @@ class VideoProcessor(
             while (isProcessing.get() && currentPosition <= videoDuration) {
                 // Convert ms to microseconds for retriever
                 val timeUs = currentPosition * 1000
+
+                // Use OPTION_CLOSEST to get the exact frame at the timestamp
                 val frameBitmap = retriever.getFrameAtTime(
                     timeUs,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                )?.copy(Bitmap.Config.ARGB_8888, true)
+                    MediaMetadataRetriever.OPTION_CLOSEST
+                )
 
                 if (frameBitmap != null) {
-                    val timestamp = currentPosition
-                    val bitmapForProcessing = frameBitmap
+                    currentTimestamp = currentPosition
 
-                    mainHandler.post {
-                        tracker?.detect(bitmapForProcessing)
+                    // Log frame info to verify we're getting different frames
+                    Log.d(TAG, "Extracted frame at ${currentPosition}ms, size: ${frameBitmap.width}x${frameBitmap.height}")
 
-                        // Progress update
-                        processedFrames++
-                        val progress = (processedFrames * 100) / totalFramesToProcess
-                        _progressLiveData.postValue(progress)
+                    // Create a copy with the right config for processing
+                    val processableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
 
-                        // Release bitmap
-                        bitmapForProcessing.recycle()
+                    // Process frame synchronously to ensure proper sequencing
+                    if (isProcessing.get()) {
+                        detector?.detect(processableBitmap)
                     }
 
-                    // Small sleep to prevent OOM
-                    Thread.sleep(5)
+                    // Release bitmaps
+                    processableBitmap.recycle()
+                    frameBitmap.recycle()
+
+                    // Small sleep to prevent OOM and allow callbacks to complete
+                    Thread.sleep(10)
+                } else {
+                    Log.w(TAG, "Failed to extract frame at ${currentPosition}ms")
+                    // If frame extraction fails, still record empty detection for this timestamp
+                    currentTimestamp = currentPosition
+                    onEmptyDetect()
                 }
 
                 currentPosition += frameIntervalMs
+                processedFrames++
+
+                // Update progress on main thread
+                val progress = (processedFrames * 100) / totalFramesToProcess
+                mainHandler.post {
+                    _progressLiveData.postValue(progress)
+                }
             }
 
             // Allow final callbacks to complete
@@ -203,28 +220,29 @@ class VideoProcessor(
      */
     fun close() {
         stopProcessing()
-        tracker?.close()
-        tracker = null
+        detector?.close()
+        detector = null
         executorService.shutdown()
     }
 
     /**
-     * Callback from Tracker when object detection yields results
+     * Callback from BarbellDetector when object detection yields results
      */
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
         if (isProcessing.get()) {
-            val timestamp = processedFrames * frameIntervalMs
-            trackingData[timestamp] = boundingBoxes
-            Log.d(TAG, "Timestamp $timestamp: ${boundingBoxes.size} detections, inference time: $inferenceTime ms, boxes: $boundingBoxes")
+            trackingData[currentTimestamp] = boundingBoxes
+            Log.d(TAG, "Timestamp $currentTimestamp: ${boundingBoxes.size} detections, inference time: $inferenceTime ms")
         }
     }
 
     /**
-     * Callback from Tracker when no objects are detected
+     * Callback from BarbellDetector when no objects are detected
      */
     override fun onEmptyDetect() {
-        val timestamp = processedFrames * frameIntervalMs
-        trackingData[timestamp] = emptyList()
+        if (isProcessing.get()) {
+            trackingData[currentTimestamp] = emptyList()
+            Log.d(TAG, "Timestamp $currentTimestamp: No detections")
+        }
     }
 
     /**
