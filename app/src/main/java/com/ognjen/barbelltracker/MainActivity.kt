@@ -1,41 +1,43 @@
 package com.ognjen.barbelltracker
 
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import android.widget.Button
+import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.VideoView
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import org.opencv.android.OpenCVLoader
 
-class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var originalVideoView: VideoView
     private lateinit var processedVideoView: VideoView
     private lateinit var overlayView: OverlayView
     private lateinit var boundingBoxTextView: TextView
     private lateinit var loadFromGalleryButton: Button
-    private lateinit var detectButton: Button
-    private lateinit var tracker: Tracker
-    private var selectedVideoUri: Uri? = null
+    private lateinit var processButton: Button
+    private lateinit var playButton: Button
+    private lateinit var progressBar: ProgressBar
+    private lateinit var progressText: TextView
 
-    // For frame extraction and processing
-    private lateinit var retriever: MediaMetadataRetriever
+    private lateinit var videoProcessor: VideoProcessor
+    private var selectedVideoUri: Uri? = null
+    private var trackingData: Map<Long, List<BoundingBox>> = emptyMap()
+
+    // For playback
     private val handler = Handler(Looper.getMainLooper())
-    private var frameExtractorRunnable: Runnable? = null
-    private var isProcessingVideo = false
-    private var videoDuration = 0L
-    private var currentPosition = 0L
-    private val frameInterval = 100L // Extract frame every 100ms
+    private var playbackRunnable: Runnable? = null
+    private var isPlaying = false
+    private var currentPlaybackTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,33 +56,81 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         overlayView = findViewById(R.id.overlay)
         boundingBoxTextView = findViewById(R.id.boundingBoxTextView)
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
-        detectButton = findViewById(R.id.detectButton)
+        processButton = findViewById(R.id.detectButton) // Reusing the detect button for processing
+        playButton = findViewById(R.id.playButton) // You'll need to add this to your layout
+        progressBar = findViewById(R.id.progressBar) // You'll need to add this to your layout
+        progressText = findViewById(R.id.progressText) // You'll need to add this to your layout
 
-        // Initialize tracker
-        tracker = Tracker(this, "best_float32.tflite", this)
+        // Initialize VideoProcessor
+        videoProcessor = VideoProcessor(this, "best_float32.tflite")
+
+        // Observe processing status and progress
+        setupObservers()
 
         // Set button click listeners
         loadFromGalleryButton.setOnClickListener {
             openGallery()
         }
 
-        detectButton.setOnClickListener {
-            processVideoRealtime()
+        processButton.setOnClickListener {
+            processVideo()
+        }
+
+        playButton.setOnClickListener {
+            togglePlayback()
         }
 
         // Setup video completion listener
         originalVideoView.setOnCompletionListener {
-            // Reset video if we're processing frames
-            if (isProcessingVideo) {
-                originalVideoView.start()
-            }
+            stopPlayback()
+        }
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun setupObservers() {
+        // Observe processing progress
+        videoProcessor.progressLiveData.observe(this) { progress ->
+            progressBar.progress = progress
+            progressText.text = "$progress%"
         }
 
-        processedVideoView.setOnCompletionListener {
-            // Reset video if we're processing frames
-            if (isProcessingVideo) {
-                processedVideoView.start()
-                currentPosition = 0
+        // Observe processing status
+        videoProcessor.processingStatusLiveData.observe(this) { status ->
+            when (status) {
+                is VideoProcessor.ProcessingStatus.STARTING -> {
+                    progressBar.visibility = View.VISIBLE
+                    progressText.visibility = View.VISIBLE
+                    processButton.text = "Cancel Processing"
+                    playButton.isEnabled = false
+                }
+                is VideoProcessor.ProcessingStatus.PROCESSING -> {
+                    // Status already handled by progress updates
+                }
+                is VideoProcessor.ProcessingStatus.COMPLETED -> {
+                    progressBar.visibility = View.GONE
+                    progressText.visibility = View.GONE
+                    processButton.text = "Process Video"
+                    playButton.isEnabled = true
+
+                    // Get tracking data
+                    trackingData = videoProcessor.getTrackingData()
+                    Toast.makeText(this, "Processing complete! ${trackingData.size} frames processed",
+                        Toast.LENGTH_SHORT).show()
+                }
+                is VideoProcessor.ProcessingStatus.CANCELLED -> {
+                    progressBar.visibility = View.GONE
+                    progressText.visibility = View.GONE
+                    processButton.text = "Process Video"
+                    playButton.isEnabled = false
+                    Toast.makeText(this, "Processing cancelled", Toast.LENGTH_SHORT).show()
+                }
+                is VideoProcessor.ProcessingStatus.ERROR -> {
+                    progressBar.visibility = View.GONE
+                    progressText.visibility = View.GONE
+                    processButton.text = "Process Video"
+                    playButton.isEnabled = false
+                    Toast.makeText(this, "Error: ${status.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -90,8 +140,8 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
             Log.d(TAG, "Selected URI: $uri")
             selectedVideoUri = uri
 
-            // Stop any ongoing processing
-            stopVideoProcessing()
+            // Stop any ongoing processing or playback
+            stopProcessingAndPlayback()
 
             // Set the video to both VideoViews
             originalVideoView.setVideoURI(uri)
@@ -100,13 +150,12 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
             // Clear overlay
             overlayView.clear()
 
-            // Initialize retriever
-            retriever = MediaMetadataRetriever()
-            retriever.setDataSource(this, uri)
+            // Reset tracking data
+            trackingData = emptyMap()
 
-            // Get video duration
-            val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            videoDuration = durationString?.toLong() ?: 0L
+            // Enable process button
+            processButton.isEnabled = true
+            playButton.isEnabled = false
         } else {
             Log.d(TAG, "No media selected")
             Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
@@ -117,150 +166,161 @@ class MainActivity : AppCompatActivity(), Tracker.TrackerListener {
         pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
     }
 
-    @SuppressLint("SetTextI18n")
-    private fun processVideoRealtime() {
+    private fun processVideo() {
         if (selectedVideoUri == null) {
             Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
             return
         }
 
         // If already processing, stop
-        if (isProcessingVideo) {
-            stopVideoProcessing()
-            detectButton.text = "Detect"
+        if (videoProcessor.processingStatusLiveData.value is VideoProcessor.ProcessingStatus.PROCESSING) {
+            videoProcessor.stopProcessing()
             return
         }
 
-        try {
-            // Start both videos
-            originalVideoView.start()
-            processedVideoView.start()
+        // Start processing the video
+        videoProcessor.processVideo(selectedVideoUri!!)
+    }
 
-            // Change button text
-            detectButton.text = "Stop"
-
-            // Start frame extraction
-            isProcessingVideo = true
-            currentPosition = 0
-            startFrameExtraction()
-
-        } catch (e: Exception) {
-            Log.e(ERRORTAG, "Error processing video: ${e.message}", e)
-            Toast.makeText(this, "Error processing video: ${e.message}", Toast.LENGTH_SHORT).show()
-            stopVideoProcessing()
+    private fun togglePlayback() {
+        if (isPlaying) {
+            stopPlayback()
+        } else {
+            startPlayback()
         }
     }
 
-    private fun startFrameExtraction() {
-        frameExtractorRunnable = object : Runnable {
-            override fun run() {
-                if (!isProcessingVideo || currentPosition > videoDuration) {
-                    return
-                }
-
-                try {
-                    // Get frame at current position
-                    val timeMicrosec = currentPosition * 1000 // Convert to microseconds
-                    val frameBitmap = retriever.getFrameAtTime(timeMicrosec,
-                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.copy(Bitmap.Config.ARGB_8888, true)
-
-                    if (frameBitmap != null) {
-                        // Process frame with tracker
-                        tracker.detect(frameBitmap)
-                    }
-
-                    // Update current position
-                    currentPosition += frameInterval
-
-                    // Schedule next frame extraction
-                    handler.postDelayed(this, frameInterval)
-
-                } catch (e: Exception) {
-                    Log.e(ERRORTAG, "Error extracting frame: ${e.message}", e)
-                }
-            }
+    private fun startPlayback() {
+        if (selectedVideoUri == null || trackingData.isEmpty()) {
+            Toast.makeText(this, "No processed video data available", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        // Start the frame extraction process
-        handler.post(frameExtractorRunnable!!)
+        isPlaying = true
+        playButton.text = "Stop"
+
+        // Start both videos
+        originalVideoView.start()
+        processedVideoView.start()
+
+        // Reset overlay
+        overlayView.clear()
+
+        // Start tracking playback
+        currentPlaybackTime = 0L
+        startTrackingPlayback()
     }
 
     @SuppressLint("SetTextI18n")
-    private fun stopVideoProcessing() {
-        isProcessingVideo = false
-
-        // Remove callbacks
-        frameExtractorRunnable?.let {
-            handler.removeCallbacks(it)
-        }
-
-        // Release retriever if initialized
-        if (::retriever.isInitialized) {
-            retriever.release()
-        }
+    private fun stopPlayback() {
+        isPlaying = false
+        playButton.text = "Play"
 
         // Stop videos
-        originalVideoView.stopPlayback()
-        processedVideoView.stopPlayback()
+        originalVideoView.pause()
+        processedVideoView.pause()
+
+        // Remove playback callback
+        playbackRunnable?.let {
+            handler.removeCallbacks(it)
+        }
+    }
+
+    private fun startTrackingPlayback() {
+        playbackRunnable = object : Runnable {
+            override fun run() {
+                if (!isPlaying) return
+
+                // Get current video position
+                val videoPosition = processedVideoView.currentPosition.toLong()
+
+                // Find the closest timestamp in trackingData
+                val closestTimestamp = findClosestTimestamp(videoPosition)
+
+                // Get bounding boxes for this timestamp
+                val boxes = trackingData[closestTimestamp]
+
+                // Update overlay with bounding boxes
+                if (boxes != null && boxes.isNotEmpty()) {
+                    updateOverlay(boxes)
+                } else {
+                    overlayView.clear()
+                }
+
+                // Schedule next update
+                handler.postDelayed(this, 16) // ~60fps
+            }
+        }
+
+        // Start playback tracking
+        handler.post(playbackRunnable!!)
+    }
+
+    private fun findClosestTimestamp(targetTime: Long): Long {
+        if (trackingData.isEmpty()) return 0L
+
+        // Find timestamp closest to the target time
+        var closestTime = trackingData.keys.first()
+        var smallestDiff = Math.abs(targetTime - closestTime)
+
+        for (timestamp in trackingData.keys) {
+            val diff = Math.abs(targetTime - timestamp)
+            if (diff < smallestDiff) {
+                smallestDiff = diff
+                closestTime = timestamp
+            }
+        }
+
+        return closestTime
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun updateOverlay(boundingBoxes: List<BoundingBox>) {
+        overlayView.setResults(boundingBoxes)
+
+        // StringBuilder to accumulate all detections for display in the text box
+        val detectionTextBuilder = StringBuilder()
+
+        // Log and display each detection with enumeration
+        boundingBoxes.forEachIndexed { index, boundingBox ->
+            // Format the detection information
+            val bboxText = """
+            Detection ${index + 1}:
+            Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
+                       x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
+            Confidence: ${boundingBox.cnf.format(4)}
+            ID: ${boundingBox.id}
+            --------------------------
+            """.trimIndent()
+
+            // Append to the StringBuilder for display
+            detectionTextBuilder.append(bboxText).append("\n")
+        }
+
+        // Display all detections in the text box
+        boundingBoxTextView.text = detectionTextBuilder.toString()
+    }
+
+    private fun stopProcessingAndPlayback() {
+        // Stop video processing if in progress
+        videoProcessor.stopProcessing()
+
+        // Stop playback
+        stopPlayback()
 
         // Clear overlay
         overlayView.clear()
-
-        // Reset button text
-        detectButton.text = "Detect"
-    }
-
-    override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
-        if (boundingBoxes.isEmpty()) {
-            onEmptyDetect()
-            return
-        }
-
-        // Update the overlay with detected bounding boxes
-        runOnUiThread {
-            overlayView.setResults(boundingBoxes)
-
-            // StringBuilder to accumulate all detections for display in the text box
-            val detectionTextBuilder = StringBuilder()
-
-            // Log and display each detection with enumeration
-            boundingBoxes.forEachIndexed { index, boundingBox ->
-                // Format the detection information
-                val bboxText = """
-                Detection ${index + 1}:
-                Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
-                           x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
-                Confidence: ${boundingBox.cnf.format(4)}
-                Inference time: $inferenceTime ms
-                ID: ${boundingBox.id}
-                --------------------------
-                """.trimIndent()
-
-                // Append to the StringBuilder for display
-                detectionTextBuilder.append(bboxText).append("\n")
-            }
-
-            // Display all detections in the text box
-            boundingBoxTextView.text = detectionTextBuilder.toString()
-        }
-    }
-
-    override fun onEmptyDetect() {
-        runOnUiThread {
-            "No object detected".also { boundingBoxTextView.text = it }
-            overlayView.clear()
-        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        stopVideoProcessing()
-        tracker.close()
+        stopProcessingAndPlayback()
+        videoProcessor.close()
     }
 
     override fun onPause() {
         super.onPause()
-        stopVideoProcessing()
+        stopPlayback()
     }
 
     private fun Float.format(digits: Int) = "%.${digits}f".format(this)
