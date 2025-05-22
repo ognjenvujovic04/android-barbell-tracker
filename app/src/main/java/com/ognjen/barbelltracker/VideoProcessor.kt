@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class VideoProcessor(
     private val context: Context,
     private val modelPath: String
-) : BarbellDetector.DetectionListener {
+) : Tracker.TrackerListener {
 
     // For frame extraction
     private lateinit var retriever: MediaMetadataRetriever
@@ -45,8 +45,8 @@ class VideoProcessor(
     private val _processingStatusLiveData = MutableLiveData<ProcessingStatus>()
     val processingStatusLiveData: LiveData<ProcessingStatus> = _processingStatusLiveData
 
-    // BarbellDetector instance
-    private var detector: BarbellDetector? = null
+    // Tracker instance
+    private var tracker: Tracker? = null
 
     /**
      * Process a video file and extract barbell tracking data at the video's native frame rate
@@ -67,9 +67,9 @@ class VideoProcessor(
         _processingStatusLiveData.postValue(ProcessingStatus.STARTING)
 
         try {
-            // Initialize detector if needed
-            if (detector == null) {
-                detector = BarbellDetector(context, modelPath, this)
+            // Initialize tracker if needed
+            if (tracker == null) {
+                tracker = Tracker(context, modelPath, this)
             }
 
             // Initialize media retriever
@@ -138,7 +138,7 @@ class VideoProcessor(
 
                     // Process frame synchronously to ensure proper sequencing
                     if (isProcessing.get()) {
-                        detector?.detect(processableBitmap)
+                        tracker?.detect(processableBitmap)
                     }
 
                     // Release bitmaps
@@ -220,8 +220,8 @@ class VideoProcessor(
      */
     fun close() {
         stopProcessing()
-        detector?.close()
-        detector = null
+        tracker?.close()
+        tracker = null
         executorService.shutdown()
     }
 

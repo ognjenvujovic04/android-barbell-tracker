@@ -87,7 +87,6 @@ class BarbellDetector(
         }
 
         var inferenceTime = SystemClock.uptimeMillis()
-        Log.d(TAG, "Starting detection")
 
         val resizedBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
 
