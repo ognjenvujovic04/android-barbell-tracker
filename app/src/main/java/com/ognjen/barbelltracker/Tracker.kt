@@ -113,6 +113,7 @@ class Tracker(
         // Get detected boxes from YOLO model
         val detectedBoxes = bestBox(output.floatArray)
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
+        Log.d(TAG, "Frame: $frameCount, detected boxes: ${detectedBoxes?.size}, inference time: $inferenceTime ms")
 
         if (detectedBoxes.isNullOrEmpty()) {
             // Update trackers with no detections
@@ -172,7 +173,6 @@ class Tracker(
 
     private fun updateTrackers(detectedBoxes: List<BoundingBox>, frameWidth: Int, frameHeight: Int): List<BoundingBox> {
         frameCount++
-        Log.d(TAG, "Frame: $frameCount, detected boxes: ${detectedBoxes.size}")
 
         // Convert normalized coordinates to absolute for Kalman trackers
         val detectionRects = detectedBoxes.map { bbox ->

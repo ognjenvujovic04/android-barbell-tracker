@@ -6,6 +6,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -87,7 +88,7 @@ class VideoProcessor(
 
             // Determine native frame rate and set interval
             val fpsString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
-            val fps = fpsString?.toFloatOrNull() ?: 30f
+            val fps = fpsString?.toFloatOrNull() ?: 20f
             frameIntervalMs = (1000 / fps).toLong().coerceAtLeast(1L)
 
             // Calculate total frames to process for progress reporting
@@ -98,7 +99,10 @@ class VideoProcessor(
             _processingStatusLiveData.postValue(ProcessingStatus.PROCESSING)
 
             executorService.execute {
+                var inferenceTime = SystemClock.uptimeMillis()
                 processFrames()
+                inferenceTime = SystemClock.uptimeMillis() - inferenceTime
+                Log.d(TAG, "Total processing time: $inferenceTime ms")
             }
 
         } catch (e: Exception) {
@@ -129,9 +133,6 @@ class VideoProcessor(
 
                 if (frameBitmap != null) {
                     currentTimestamp = currentPosition
-
-                    // Log frame info to verify we're getting different frames
-                    Log.d(TAG, "Extracted frame at ${currentPosition}ms, size: ${frameBitmap.width}x${frameBitmap.height}")
 
                     // Create a copy with the right config for processing
                     val processableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
@@ -165,7 +166,7 @@ class VideoProcessor(
             }
 
             // Allow final callbacks to complete
-            Thread.sleep(100)
+            Thread.sleep(50)
 
             mainHandler.post {
                 if (isProcessing.get()) {
@@ -231,7 +232,6 @@ class VideoProcessor(
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
         if (isProcessing.get()) {
             trackingData[currentTimestamp] = boundingBoxes
-            Log.d(TAG, "Timestamp $currentTimestamp: ${boundingBoxes.size} detections, inference time: $inferenceTime ms")
         }
     }
 
@@ -257,7 +257,7 @@ class VideoProcessor(
     }
 
     companion object {
-        private const val TAG = "VideoProcessor"
-        private const val ERRORTAG = "VideoProcessorError"
+        private const val TAG = "BarbelltrackerLog"
+        private const val ERRORTAG = "BarbelltrackerError"
     }
 }
