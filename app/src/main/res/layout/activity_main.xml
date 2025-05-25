@@ -37,7 +37,6 @@
             android:enabled="false" />
     </LinearLayout>
 
-    <!-- Progress Indicators -->
     <LinearLayout
         android:id="@+id/progressLayout"
         android:layout_width="match_parent"
