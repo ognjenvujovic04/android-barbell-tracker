@@ -14,12 +14,16 @@ litertApi = "1.1.2"
 litert = "1.1.2"
 litertGpu = "1.1.2"
 litertSupportApi = "1.1.2"
+ffmpeg-metadata-retriever = "1.0.19"
 
 
 [libraries]
 opencv = { group = "com.quickbirdstudios", name = "opencv", version = "4.5.3.0" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version = "1.6.1" }
 androidx-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+ffmpeg-media-metadata-retriever-core = { module = "com.github.wseemann:FFmpegMediaMetadataRetriever-core", version.ref = "ffmpeg-metadata-retriever" }
+ffmpeg-media-metadata-retriever-native = { module = "com.github.wseemann:FFmpegMediaMetadataRetriever-native", version.ref = "ffmpeg-metadata-retriever" }
+
 
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
