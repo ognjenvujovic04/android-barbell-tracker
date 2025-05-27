@@ -99,22 +99,40 @@ class Tracker(
             return
         }
 
-        var inferenceTime = SystemClock.uptimeMillis()
+        val totalDetectStartTime = SystemClock.uptimeMillis()
 
+        // --- Bitmap Scaling ---
+        val scSt = SystemClock.uptimeMillis()
         reusableBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
+        val scEt = SystemClock.uptimeMillis()
+        val scT = scEt - scSt
 
+        // --- Image Preprocessing ---
+        val ipSt = SystemClock.uptimeMillis()
         val tensorImage = TensorImage(INPUT_IMAGE_TYPE)
         tensorImage.load(reusableBitmap)
         val processedImage = imageProcessor.process(tensorImage)
         val imageBuffer = processedImage.buffer
+        val ipEt = SystemClock.uptimeMillis()
+        val ipT = ipEt - ipSt
 
+        // --- Model Inference ---
+        val miSt = SystemClock.uptimeMillis()
         val output = TensorBuffer.createFixedSize(intArrayOf(1, numChannel, numElements), OUTPUT_IMAGE_TYPE)
         interpreter.run(imageBuffer, output.buffer)
+        val miEt = SystemClock.uptimeMillis()
+        val miT = miEt - miSt
 
-        // Get detected boxes from YOLO model
+        // --- Post-processing (bestBox, NMS) ---
+        val ppSt = SystemClock.uptimeMillis()
         val detectedBoxes = bestBox(output.floatArray)
-        inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-        Log.d(TAG, "Frame: $frameCount, detected boxes: ${detectedBoxes?.size}, inference time: $inferenceTime ms")
+        val ppEt = SystemClock.uptimeMillis()
+        val ppT = ppEt - ppSt
+
+        val totalDetectEndTime = SystemClock.uptimeMillis()
+        val totalT = totalDetectEndTime - totalDetectStartTime
+
+        Log.d(TAG, "F:$frameCount, det:${detectedBoxes?.size}, T:$totalT ms (scale:$scT, imgproc:$ipT, infer:$miT, pstproc:$ppT)")
 
         if (detectedBoxes.isNullOrEmpty()) {
             // Update trackers with no detections
@@ -126,7 +144,7 @@ class Tracker(
         // Apply SORT tracking
         val trackedBoxes = updateTrackers(detectedBoxes, frame.width, frame.height)
 
-        trackerListener.onDetect(trackedBoxes, inferenceTime)
+        trackerListener.onDetect(trackedBoxes)
     }
 
     private fun updateTrackersWithNoDetections(frameWidth: Int, frameHeight: Int): List<BoundingBox>? {
@@ -390,7 +408,7 @@ class Tracker(
 
     interface TrackerListener {
         fun onEmptyDetect()
-        fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long)
+        fun onDetect(boundingBoxes: List<BoundingBox>)
     }
 
     companion object {

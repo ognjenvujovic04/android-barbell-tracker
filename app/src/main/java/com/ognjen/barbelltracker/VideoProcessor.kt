@@ -132,14 +132,12 @@ class VideoProcessor(
      * Extract and process frames from the video at the native frame rate
      */
     private fun processFrames() {
-        Log.d(TAG, "Starting processFrames()")
         val completionLatch = CountDownLatch(2)
 
         val startTime = SystemClock.uptimeMillis()
 
         // Producer - frame extraction
         frameProcessingExecutor.execute {
-            Log.d(TAG, "Producer thread started")
             try {
                 var currentPosition = 0L
                 while (isProcessing.get() && currentPosition <= videoDuration) {
@@ -164,7 +162,6 @@ class VideoProcessor(
 
         // Consumer - frame processing
         frameProcessingExecutor.execute {
-            Log.d(TAG, "Consumer thread started")
             try {
                 while (isProcessing.get()) {
                     val (bitmap, timestamp) = frameQueue.take()
@@ -249,7 +246,7 @@ class VideoProcessor(
     /**
      * Callback from BarbellDetector when object detection yields results
      */
-    override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
+    override fun onDetect(boundingBoxes: List<BoundingBox>) {
         if (isProcessing.get()) {
             trackingData[currentTimestamp] = boundingBoxes
         }
