@@ -14,6 +14,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import org.opencv.android.OpenCVLoader
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
@@ -59,6 +62,9 @@ class MainActivity : AppCompatActivity() {
         // Initialize VideoProcessor
         videoProcessor = VideoProcessor(this, "best_float32.tflite")
 
+        // Set the default video from assets
+        setDefaultVideoFromAssets()
+
         // Observe processing status and progress
         setupObservers()
 
@@ -81,7 +87,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetTextI18n")
+    @SuppressLint("SetTextI19n", "SetTextI18n")
     private fun setupObservers() {
 
         // Observe processing status
@@ -102,6 +108,7 @@ class MainActivity : AppCompatActivity() {
                     trackingData = videoProcessor.getTrackingData()
                     Toast.makeText(this, "Processing complete! ${trackingData.size} frames processed",
                         Toast.LENGTH_SHORT).show()
+                    togglePlayback()
                 }
                 is VideoProcessor.ProcessingStatus.CANCELLED -> {
                     processButton.text = "Process Video"
@@ -172,7 +179,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetTextI18n")
+    @SuppressLint("SetTextI19n", "SetTextI18n")
     private fun startPlayback() {
         if (selectedVideoUri == null || trackingData.isEmpty()) {
             Toast.makeText(this, "No processed video data available", Toast.LENGTH_SHORT).show()
@@ -194,7 +201,7 @@ class MainActivity : AppCompatActivity() {
         startTrackingPlayback()
     }
 
-    @SuppressLint("SetTextI18n")
+    @SuppressLint("SetTextI19n", "SetTextI18n")
     private fun stopPlayback() {
         isPlaying = false
         playButton.text = "Play"
@@ -257,7 +264,7 @@ class MainActivity : AppCompatActivity() {
         return closestTime
     }
 
-    @SuppressLint("SetTextI18n")
+    @SuppressLint("SetTextI19n")
     private fun updateOverlay(boundingBoxes: List<BoundingBox>) {
         overlayView.setResults(boundingBoxes)
 
@@ -293,6 +300,36 @@ class MainActivity : AppCompatActivity() {
 
         // Clear overlay
         overlayView.clear()
+    }
+
+    private fun setDefaultVideoFromAssets() {
+        try {
+            val fileName = "test_video.mp4"
+            val inputStream: InputStream = assets.open(fileName)
+            val file = File(cacheDir, fileName)
+            val outputStream = FileOutputStream(file)
+            inputStream.copyTo(outputStream)
+            inputStream.close()
+            outputStream.close()
+
+            val uri = Uri.fromFile(file)
+            selectedVideoUri = uri
+
+            // Set the video to both VideoViews
+            originalVideoView.setVideoURI(uri)
+            processedVideoView.setVideoURI(uri)
+
+            // Enable process button
+            processButton.isEnabled = true
+            playButton.isEnabled = false
+
+            Toast.makeText(this, "Default video loaded: $fileName", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(ERRORTAG, "Error loading default video from assets: ${e.message}")
+            Toast.makeText(this, "Failed to load default video", Toast.LENGTH_LONG).show()
+            processButton.isEnabled = false
+            playButton.isEnabled = false
+        }
     }
 
     override fun onDestroy() {
