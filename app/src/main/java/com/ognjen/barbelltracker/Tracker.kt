@@ -34,6 +34,7 @@ class Tracker(
     private var tensorHeight = 0
     private var numChannel = 0
     private var numElements = 0
+    private var reusableBitmap: Bitmap? = null
 
     // SORT tracking variables
     private var trackers = ArrayList<KalmanTracker>()
@@ -100,10 +101,10 @@ class Tracker(
 
         var inferenceTime = SystemClock.uptimeMillis()
 
-        val resizedBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
+        reusableBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
 
         val tensorImage = TensorImage(INPUT_IMAGE_TYPE)
-        tensorImage.load(resizedBitmap)
+        tensorImage.load(reusableBitmap)
         val processedImage = imageProcessor.process(tensorImage)
         val imageBuffer = processedImage.buffer
 
