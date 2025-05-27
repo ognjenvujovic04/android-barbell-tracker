@@ -10,7 +10,9 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -22,6 +24,11 @@ class VideoProcessor(
     private val context: Context,
     private val modelPath: String
 ) : Tracker.TrackerListener {
+
+    // Frame data class with timestamp
+    private data class FrameData(val bitmap: Bitmap?, val timestamp: Long)
+    // Frame queue for prefetching (capacity 5)
+    private val frameQueue = LinkedBlockingQueue<FrameData>(5)
 
     // For frame extraction
     private lateinit var retriever: MediaMetadataRetriever
@@ -40,6 +47,9 @@ class VideoProcessor(
     private var totalFramesToProcess: Int = 0
     private var frameIntervalMs: Long = 100L
     private var currentTimestamp: Long = 0L
+
+    private val frameProcessingExecutor = Executors.newFixedThreadPool(2) // Dedicated for frame tasks
+    private val mainExecutor = Executors.newSingleThreadExecutor() // For main coordination
 
 
     private val _processingStatusLiveData = MutableLiveData<ProcessingStatus>()
@@ -66,14 +76,8 @@ class VideoProcessor(
         _processingStatusLiveData.postValue(ProcessingStatus.STARTING)
 
         try {
-            // Initialize tracker if needed
-            if (tracker == null) {
-                tracker = Tracker(context, modelPath, this)
-            }
-
-            // Initialize media retriever
-            retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, videoUri)
+            tracker = tracker ?: Tracker(context, modelPath, this)
+            retriever = MediaMetadataRetriever().apply { setDataSource(context, videoUri) }
 
             // Get video duration in milliseconds
             val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
@@ -116,7 +120,7 @@ class VideoProcessor(
             }
 
         } catch (e: Exception) {
-            Log.e(ERRORTAG, "Error initializing video processing: ${e.message}", e)
+            Log.e(ERRORTAG, "Init error: ${e.message}", e)
             _processingStatusLiveData.postValue(ProcessingStatus.ERROR(e.message ?: "Unknown error"))
             releaseResources()
         }
@@ -128,63 +132,74 @@ class VideoProcessor(
      * Extract and process frames from the video at the native frame rate
      */
     private fun processFrames() {
-        try {
-            var currentPosition = 0L
+        Log.d(TAG, "Starting processFrames()")
+        val completionLatch = CountDownLatch(2)
 
-            while (isProcessing.get() && currentPosition <= videoDuration) {
-                // Convert ms to microseconds for retriever
-                val timeUs = currentPosition * 1000
+        val startTime = SystemClock.uptimeMillis()
 
-                // Use OPTION_CLOSEST to get the exact frame at the timestamp
-                val frameBitmap = retriever.getFrameAtTime(
-                    timeUs,
-                    MediaMetadataRetriever.OPTION_CLOSEST
-                )
+        // Producer - frame extraction
+        frameProcessingExecutor.execute {
+            Log.d(TAG, "Producer thread started")
+            try {
+                var currentPosition = 0L
+                while (isProcessing.get() && currentPosition <= videoDuration) {
+                    val frameBitmap = retriever.getFrameAtTime(
+                        currentPosition * 1000,
+                        MediaMetadataRetriever.OPTION_CLOSEST
+                    )
 
-                if (frameBitmap != null) {
+                    val processedBitmap = frameBitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                    frameQueue.put(FrameData(processedBitmap, currentPosition))
+                    frameBitmap?.recycle()
+
+                    currentPosition += frameIntervalMs
+                }
+                frameQueue.put(FrameData(null, -1))
+            } catch (e: Exception) {
+                Log.e(ERRORTAG, "Producer error", e)
+            } finally {
+                completionLatch.countDown()
+            }
+        }
+
+        // Consumer - frame processing
+        frameProcessingExecutor.execute {
+            Log.d(TAG, "Consumer thread started")
+            try {
+                while (isProcessing.get()) {
+                    val (bitmap, timestamp) = frameQueue.take()
+                    if (timestamp == -1L) break
+
+                    currentTimestamp = timestamp
                     try {
-                        currentTimestamp = currentPosition
-                        // Create a copy with the right config for processing
-                        reusableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
-
-                        // Process frame synchronously to ensure proper sequencing
-                        if (isProcessing.get()) {
-                            tracker?.detect(reusableBitmap ?: return)
+                        if (bitmap != null) {
+                            tracker?.detect(bitmap)
                         }
                     } finally {
-                        reusableBitmap?.recycle()
-                        frameBitmap.recycle()
+                        bitmap?.recycle()
                     }
-
-                    // Small sleep to prevent OOM and allow callbacks to complete
-                    Thread.sleep(10)
-                } else {
-                    Log.w(TAG, "Failed to extract frame at ${currentPosition}ms")
-                    // If frame extraction fails, still record empty detection for this timestamp
-                    currentTimestamp = currentPosition
-                    onEmptyDetect()
+                    processedFrames++
                 }
-
-                currentPosition += frameIntervalMs
-                processedFrames++
-
+            } catch (e: Exception) {
+                Log.e(ERRORTAG, "Consumer error", e)
+            } finally {
+                completionLatch.countDown()
             }
+        }
 
-            // Allow final callbacks to complete
-            Thread.sleep(50)
+        // Move await to background thread
+        mainExecutor.execute {
+            try {
+                completionLatch.await()
+                val totalTime = SystemClock.uptimeMillis() - startTime  // Calculate total time
+                Log.d(TAG, "Total processing time: $totalTime ms")      // Log it here
 
-            mainHandler.post {
-                if (isProcessing.get()) {
-                    _processingStatusLiveData.postValue(ProcessingStatus.COMPLETED)
+                mainHandler.post {
+                    _processingStatusLiveData.value = ProcessingStatus.COMPLETED
                     releaseResources()
                 }
-            }
-
-        } catch (e: Exception) {
-            Log.e(ERRORTAG, "Error processing video frames: ${e.message}", e)
-            mainHandler.post {
-                _processingStatusLiveData.postValue(ProcessingStatus.ERROR(e.message ?: "Unknown error"))
-                releaseResources()
+            } catch (e: InterruptedException) {
+                Log.w(TAG, "Processing interrupted", e)
             }
         }
     }
