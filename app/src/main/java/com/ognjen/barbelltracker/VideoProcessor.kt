@@ -132,19 +132,20 @@ class VideoProcessor(
                 )
 
                 if (frameBitmap != null) {
-                    currentTimestamp = currentPosition
+                    var processableBitmap: Bitmap? = null
+                    try {
+                        currentTimestamp = currentPosition
+                        // Create a copy with the right config for processing
+                        processableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
 
-                    // Create a copy with the right config for processing
-                    val processableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
-
-                    // Process frame synchronously to ensure proper sequencing
-                    if (isProcessing.get()) {
-                        tracker?.detect(processableBitmap)
+                        // Process frame synchronously to ensure proper sequencing
+                        if (isProcessing.get()) {
+                            tracker?.detect(processableBitmap)
+                        }
+                    } finally {
+                        processableBitmap?.recycle()
+                        frameBitmap.recycle()
                     }
-
-                    // Release bitmaps
-                    processableBitmap.recycle()
-                    frameBitmap.recycle()
 
                     // Small sleep to prevent OOM and allow callbacks to complete
                     Thread.sleep(10)
