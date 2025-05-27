@@ -27,6 +27,8 @@ class VideoProcessor(
     private lateinit var retriever: MediaMetadataRetriever
     private val executorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var reusableBitmap: Bitmap? = null
+
 
     // Tracking data - maps time (milliseconds) to detected bounding boxes
     private val trackingData = mutableMapOf<Long, List<BoundingBox>>()
@@ -80,6 +82,7 @@ class VideoProcessor(
             // Get video duration in milliseconds
             val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             videoDuration = durationString?.toLong() ?: 0L
+            Log.d(TAG, "Video duration: $videoDuration ms")
 
             if (videoDuration <= 0) {
                 _processingStatusLiveData.postValue(ProcessingStatus.ERROR("Invalid video duration"))
@@ -88,8 +91,19 @@ class VideoProcessor(
 
             // Determine native frame rate and set interval
             val fpsString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
+            Log.d(TAG, "Native frame rate: $fpsString fps")
             val fps = fpsString?.toFloatOrNull() ?: 20f
             frameIntervalMs = (1000 / fps).toLong().coerceAtLeast(1L)
+            Log.d(TAG, "FPS: $fps, Frame interval: $frameIntervalMs ms")
+
+            // height and width of the video
+            val videoHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 0
+            val videoWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() ?: 0
+            Log.d(TAG, "Video dimensions: ${videoWidth}x${videoHeight}")
+
+            // Create a reusable bitmap for processing frames
+            reusableBitmap = Bitmap.createBitmap(videoHeight, videoWidth, Bitmap.Config.ARGB_8888)
+
 
             // Calculate total frames to process for progress reporting
             totalFramesToProcess = (videoDuration / frameIntervalMs).toInt() + 1
@@ -132,18 +146,17 @@ class VideoProcessor(
                 )
 
                 if (frameBitmap != null) {
-                    var processableBitmap: Bitmap? = null
                     try {
                         currentTimestamp = currentPosition
                         // Create a copy with the right config for processing
-                        processableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                        reusableBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, false)
 
                         // Process frame synchronously to ensure proper sequencing
                         if (isProcessing.get()) {
-                            tracker?.detect(processableBitmap)
+                            tracker?.detect(reusableBitmap ?: return)
                         }
                     } finally {
-                        processableBitmap?.recycle()
+                        reusableBitmap?.recycle()
                         frameBitmap.recycle()
                     }
 
