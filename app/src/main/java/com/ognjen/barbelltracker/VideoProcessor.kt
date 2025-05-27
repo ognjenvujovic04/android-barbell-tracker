@@ -254,10 +254,10 @@ class VideoProcessor(
      * Status class to represent the current state of video processing
      */
     sealed class ProcessingStatus {
-        object STARTING : ProcessingStatus()
-        object PROCESSING : ProcessingStatus()
-        object COMPLETED : ProcessingStatus()
-        object CANCELLED : ProcessingStatus()
+        data object STARTING : ProcessingStatus()
+        data object PROCESSING : ProcessingStatus()
+        data object COMPLETED : ProcessingStatus()
+        data object CANCELLED : ProcessingStatus()
         data class ERROR(val message: String) : ProcessingStatus()
     }
 
