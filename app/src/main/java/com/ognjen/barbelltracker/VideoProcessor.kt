@@ -41,9 +41,6 @@ class VideoProcessor(
     private var frameIntervalMs: Long = 100L
     private var currentTimestamp: Long = 0L
 
-    // Progress tracking and callbacks
-    private val _progressLiveData = MutableLiveData<Int>()
-    val progressLiveData: LiveData<Int> = _progressLiveData
 
     private val _processingStatusLiveData = MutableLiveData<ProcessingStatus>()
     val processingStatusLiveData: LiveData<ProcessingStatus> = _processingStatusLiveData
@@ -66,7 +63,6 @@ class VideoProcessor(
         // Reset state
         trackingData.clear()
         processedFrames = 0
-        _progressLiveData.postValue(0)
         _processingStatusLiveData.postValue(ProcessingStatus.STARTING)
 
         try {
@@ -172,11 +168,6 @@ class VideoProcessor(
                 currentPosition += frameIntervalMs
                 processedFrames++
 
-                // Update progress on main thread
-                val progress = (processedFrames * 100) / totalFramesToProcess
-                mainHandler.post {
-                    _progressLiveData.postValue(progress)
-                }
             }
 
             // Allow final callbacks to complete

@@ -6,9 +6,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.View
 import android.widget.Button
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
@@ -16,6 +14,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import org.opencv.android.OpenCVLoader
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,8 +25,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadFromGalleryButton: Button
     private lateinit var processButton: Button
     private lateinit var playButton: Button
-    private lateinit var progressBar: ProgressBar
-    private lateinit var progressText: TextView
 
     private lateinit var videoProcessor: VideoProcessor
     private var selectedVideoUri: Uri? = null
@@ -58,8 +55,6 @@ class MainActivity : AppCompatActivity() {
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
         processButton = findViewById(R.id.detectButton) // Reusing the detect button for processing
         playButton = findViewById(R.id.playButton) // You'll need to add this to your layout
-        progressBar = findViewById(R.id.progressBar) // You'll need to add this to your layout
-        progressText = findViewById(R.id.progressText) // You'll need to add this to your layout
 
         // Initialize VideoProcessor
         videoProcessor = VideoProcessor(this, "best_float32.tflite")
@@ -88,18 +83,11 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun setupObservers() {
-        // Observe processing progress
-        videoProcessor.progressLiveData.observe(this) { progress ->
-            progressBar.progress = progress
-            progressText.text = "$progress%"
-        }
 
         // Observe processing status
         videoProcessor.processingStatusLiveData.observe(this) { status ->
             when (status) {
                 is VideoProcessor.ProcessingStatus.STARTING -> {
-                    progressBar.visibility = View.VISIBLE
-                    progressText.visibility = View.VISIBLE
                     processButton.text = "Cancel Processing"
                     playButton.isEnabled = false
                 }
@@ -107,8 +95,6 @@ class MainActivity : AppCompatActivity() {
                     // Status already handled by progress updates
                 }
                 is VideoProcessor.ProcessingStatus.COMPLETED -> {
-                    progressBar.visibility = View.GONE
-                    progressText.visibility = View.GONE
                     processButton.text = "Process Video"
                     playButton.isEnabled = true
 
@@ -118,15 +104,11 @@ class MainActivity : AppCompatActivity() {
                         Toast.LENGTH_SHORT).show()
                 }
                 is VideoProcessor.ProcessingStatus.CANCELLED -> {
-                    progressBar.visibility = View.GONE
-                    progressText.visibility = View.GONE
                     processButton.text = "Process Video"
                     playButton.isEnabled = false
                     Toast.makeText(this, "Processing cancelled", Toast.LENGTH_SHORT).show()
                 }
                 is VideoProcessor.ProcessingStatus.ERROR -> {
-                    progressBar.visibility = View.GONE
-                    progressText.visibility = View.GONE
                     processButton.text = "Process Video"
                     playButton.isEnabled = false
                     Toast.makeText(this, "Error: ${status.message}", Toast.LENGTH_LONG).show()
@@ -190,6 +172,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun startPlayback() {
         if (selectedVideoUri == null || trackingData.isEmpty()) {
             Toast.makeText(this, "No processed video data available", Toast.LENGTH_SHORT).show()
@@ -241,7 +224,7 @@ class MainActivity : AppCompatActivity() {
                 val boxes = trackingData[closestTimestamp]
 
                 // Update overlay with bounding boxes
-                if (boxes != null && boxes.isNotEmpty()) {
+                if (!boxes.isNullOrEmpty()) {
                     updateOverlay(boxes)
                 } else {
                     overlayView.clear()
@@ -261,10 +244,10 @@ class MainActivity : AppCompatActivity() {
 
         // Find timestamp closest to the target time
         var closestTime = trackingData.keys.first()
-        var smallestDiff = Math.abs(targetTime - closestTime)
+        var smallestDiff = abs(targetTime - closestTime)
 
         for (timestamp in trackingData.keys) {
-            val diff = Math.abs(targetTime - timestamp)
+            val diff = abs(targetTime - timestamp)
             if (diff < smallestDiff) {
                 smallestDiff = diff
                 closestTime = timestamp
