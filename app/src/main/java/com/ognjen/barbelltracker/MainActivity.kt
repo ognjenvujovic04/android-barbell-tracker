@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         playButton = findViewById(R.id.playButton) // You'll need to add this to your layout
 
         // Initialize VideoProcessor
-        videoProcessor = VideoProcessor(this, "best_float32.tflite")
+        videoProcessor = VideoProcessor(this, "best_320_float32.tflite")
 
         // Set the default video from assets
         setDefaultVideoFromAssets()
