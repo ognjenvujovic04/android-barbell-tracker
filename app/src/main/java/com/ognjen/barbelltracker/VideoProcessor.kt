@@ -1,21 +1,18 @@
 package com.ognjen.barbelltracker
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.DisplayMetrics
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.ognjen.barbelltracker.FastVideoFrameExtractor.Frame
 import com.ognjen.barbelltracker.FastVideoFrameExtractor.FrameExtractor
 import com.ognjen.barbelltracker.FastVideoFrameExtractor.IVideoFrameExtractor
-import java.nio.ByteBuffer
+import com.ognjen.barbelltracker.FastVideoFrameExtractor.Utils
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -36,7 +33,6 @@ class VideoProcessor(
     private val isProcessing = AtomicBoolean(false)
     private var videoDuration: Long = 0
     private var processedFrames: Int = 0
-    private var totalFramesToProcess: Int = 0
 
     private val executorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -71,7 +67,7 @@ class VideoProcessor(
             tracker = tracker ?: Tracker(context, modelPath, this)
 
             // Get video file path from URI
-            val videoPath = getVideoPathFromUri(videoUri)
+            val videoPath = Utils.getPath(context, videoUri)
             if (videoPath == null) {
                 _processingStatusLiveData.postValue(ProcessingStatus.ERROR("Cannot get video file path"))
                 return emptyMap()
@@ -127,32 +123,13 @@ class VideoProcessor(
     }
 
     /**
-     * Convert URI to file path - you'll need to implement this based on your app's needs
-     */
-    private fun getVideoPathFromUri(uri: Uri): String? {
-        // This is a simplified version - you might need more robust URI handling
-        return when (uri.scheme) {
-            "file" -> uri.path
-            "content" -> {
-                // Handle content:// URIs - you might need to copy to cache directory
-                // or use a different approach based on your app's architecture
-                // For now, returning null to indicate this needs implementation
-                null
-            }
-            else -> null
-        }
-    }
-
-    /**
      * Callback from FrameExtractor when a frame is extracted
      */
     override fun onCurrentFrameExtracted(currentFrame: Frame, presentationTimeUs: Long) {
         if (!isProcessing.get()) return
 
         try {
-            val timestampMs = presentationTimeUs / 1000 // Convert microseconds to milliseconds
-
-            val imageBitmap = fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
+            val imageBitmap = Utils.fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
 
 
             // Process the frame with the tracker
@@ -242,19 +219,6 @@ class VideoProcessor(
             trackingData[currentTimestamp] = emptyList()
             Log.d(TAG, "Timestamp $currentTimestamp: No detections")
         }
-    }
-
-    /**
-     * Get bitmap from ByteBuffer
-     */
-    private fun fromBufferToBitmap(buffer: ByteBuffer, width: Int, height: Int): Bitmap {
-        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        buffer.rewind()
-        result.copyPixelsFromBuffer(buffer)
-        val transformMatrix = Matrix()
-        val outputBitmap = Bitmap.createBitmap(result, 0, 0, result.width, result.height, transformMatrix, false)
-        outputBitmap.density = DisplayMetrics.DENSITY_DEFAULT
-        return outputBitmap
     }
 
     /**
