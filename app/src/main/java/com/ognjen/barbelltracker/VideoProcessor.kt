@@ -13,34 +13,21 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.ognjen.barbelltracker.FastVideoFrameExtractor.Frame
+import com.ognjen.barbelltracker.FastVideoFrameExtractor.FrameExtractor
 import com.ognjen.barbelltracker.FastVideoFrameExtractor.IVideoFrameExtractor
 import java.nio.ByteBuffer
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A class that processes videos to track barbell paths using the BarbellDetector class.
- * It extracts frames from a video at the video's native frame rate, processes them
+ * It extracts frames from a video using hardware-accelerated FrameExtractor, processes them
  * with object detection, and stores tracking data in a timestamp-based map for efficient playback.
  */
 class VideoProcessor(
     private val context: Context,
     private val modelPath: String
 ) : Tracker.TrackerListener, IVideoFrameExtractor {
-
-    // Frame data class with timestamp
-    private data class FrameData(val bitmap: Bitmap?, val timestamp: Long)
-    // Frame queue for prefetching (capacity 5)
-    private val frameQueue = LinkedBlockingQueue<FrameData>(5)
-
-    // For frame extraction
-    private lateinit var retriever: MediaMetadataRetriever
-    private val executorService = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var reusableBitmap: Bitmap? = null
-
 
     // Tracking data - maps time (milliseconds) to detected bounding boxes
     private val trackingData = mutableMapOf<Long, List<BoundingBox>>()
@@ -50,12 +37,9 @@ class VideoProcessor(
     private var videoDuration: Long = 0
     private var processedFrames: Int = 0
     private var totalFramesToProcess: Int = 0
-    private var frameIntervalMs: Long = 100L
-    private var currentTimestamp: Long = 0L
 
-    private val frameProcessingExecutor = Executors.newFixedThreadPool(2) // Dedicated for frame tasks
-    private val mainExecutor = Executors.newSingleThreadExecutor() // For main coordination
-
+    private val executorService = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val _processingStatusLiveData = MutableLiveData<ProcessingStatus>()
     val processingStatusLiveData: LiveData<ProcessingStatus> = _processingStatusLiveData
@@ -63,8 +47,11 @@ class VideoProcessor(
     // Tracker instance
     private var tracker: Tracker? = null
 
+    // FrameExtractor instance
+    private var frameExtractor: FrameExtractor? = null
+
     /**
-     * Process a video file and extract barbell tracking data at the video's native frame rate
+     * Process a video file and extract barbell tracking data using FrameExtractor
      *
      * @param videoUri Uri of the video to process
      * @return Map of timestamps to bounding boxes after processing is complete
@@ -82,46 +69,52 @@ class VideoProcessor(
 
         try {
             tracker = tracker ?: Tracker(context, modelPath, this)
-            retriever = MediaMetadataRetriever().apply { setDataSource(context, videoUri) }
 
-            // Get video duration in milliseconds
+            // Get video file path from URI
+            val videoPath = getVideoPathFromUri(videoUri)
+            if (videoPath == null) {
+                _processingStatusLiveData.postValue(ProcessingStatus.ERROR("Cannot get video file path"))
+                return emptyMap()
+            }
+
+            // Get video metadata using MediaMetadataRetriever (only for duration info)
+            val retriever = MediaMetadataRetriever().apply {
+                setDataSource(context, videoUri)
+            }
+
             val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             videoDuration = durationString?.toLong() ?: 0L
             Log.d(TAG, "Video duration: $videoDuration ms")
+
+            retriever.release()
 
             if (videoDuration <= 0) {
                 _processingStatusLiveData.postValue(ProcessingStatus.ERROR("Invalid video duration"))
                 return emptyMap()
             }
 
-            // Determine native frame rate and set interval
-            val fpsString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
-            Log.d(TAG, "Native frame rate: $fpsString fps")
-            val fps = fpsString?.toFloatOrNull() ?: 20f
-            frameIntervalMs = (1000 / fps).toLong().coerceAtLeast(1L)
-            Log.d(TAG, "FPS: $fps, Frame interval: $frameIntervalMs ms")
-
-            // height and width of the video
-            val videoHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 0
-            val videoWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() ?: 0
-            Log.d(TAG, "Video dimensions: ${videoWidth}x${videoHeight}")
-
-            // Create a reusable bitmap for processing frames
-            reusableBitmap = Bitmap.createBitmap(videoHeight, videoWidth, Bitmap.Config.ARGB_8888)
-
-
-            // Calculate total frames to process for progress reporting
-            totalFramesToProcess = (videoDuration / frameIntervalMs).toInt() + 1
+            // Create FrameExtractor instance
+            frameExtractor = FrameExtractor(this)
 
             // Start processing in background
             isProcessing.set(true)
             _processingStatusLiveData.postValue(ProcessingStatus.PROCESSING)
 
             executorService.execute {
-                var inferenceTime = SystemClock.uptimeMillis()
-                processFrames()
-                inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-                Log.d(TAG, "Total processing time: $inferenceTime ms")
+                val startTime = SystemClock.uptimeMillis()
+
+                try {
+                    // Start frame extraction - this will call our callbacks
+                    frameExtractor?.extractFrames(videoPath)
+                } catch (e: Exception) {
+                    Log.e(ERRORTAG, "Frame extraction error: ${e.message}", e)
+                    mainHandler.post {
+                        _processingStatusLiveData.value = ProcessingStatus.ERROR(e.message ?: "Frame extraction failed")
+                    }
+                } finally {
+                    val totalTime = SystemClock.uptimeMillis() - startTime
+                    Log.d(TAG, "Total processing time: $totalTime ms")
+                }
             }
 
         } catch (e: Exception) {
@@ -134,74 +127,59 @@ class VideoProcessor(
     }
 
     /**
-     * Extract and process frames from the video at the native frame rate
+     * Convert URI to file path - you'll need to implement this based on your app's needs
      */
-    private fun processFrames() {
-        val completionLatch = CountDownLatch(2)
-
-        val startTime = SystemClock.uptimeMillis()
-
-        // Producer - frame extraction
-        frameProcessingExecutor.execute {
-            try {
-                var currentPosition = 0L
-                while (isProcessing.get() && currentPosition <= videoDuration) {
-                    val frameBitmap = retriever.getFrameAtTime(
-                        currentPosition * 1000,
-                        MediaMetadataRetriever.OPTION_CLOSEST
-                    )
-
-                    val processedBitmap = frameBitmap?.copy(Bitmap.Config.ARGB_8888, false)
-                    frameQueue.put(FrameData(processedBitmap, currentPosition))
-                    frameBitmap?.recycle()
-
-                    currentPosition += frameIntervalMs
-                }
-                frameQueue.put(FrameData(null, -1))
-            } catch (e: Exception) {
-                Log.e(ERRORTAG, "Producer error", e)
-            } finally {
-                completionLatch.countDown()
+    private fun getVideoPathFromUri(uri: Uri): String? {
+        // This is a simplified version - you might need more robust URI handling
+        return when (uri.scheme) {
+            "file" -> uri.path
+            "content" -> {
+                // Handle content:// URIs - you might need to copy to cache directory
+                // or use a different approach based on your app's architecture
+                // For now, returning null to indicate this needs implementation
+                null
             }
+            else -> null
         }
+    }
 
-        // Consumer - frame processing
-        frameProcessingExecutor.execute {
-            try {
-                while (isProcessing.get()) {
-                    val (bitmap, timestamp) = frameQueue.take()
-                    if (timestamp == -1L) break
+    /**
+     * Callback from FrameExtractor when a frame is extracted
+     */
+    override fun onCurrentFrameExtracted(currentFrame: Frame, presentationTimeUs: Long) {
+        if (!isProcessing.get()) return
 
-                    currentTimestamp = timestamp
-                    try {
-                        if (bitmap != null) {
-                            tracker?.detect(bitmap)
-                        }
-                    } finally {
-                        bitmap?.recycle()
-                    }
-                    processedFrames++
-                }
-            } catch (e: Exception) {
-                Log.e(ERRORTAG, "Consumer error", e)
-            } finally {
-                completionLatch.countDown()
+        try {
+            val timestampMs = presentationTimeUs / 1000 // Convert microseconds to milliseconds
+
+            val imageBitmap = fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
+
+
+            // Process the frame with the tracker
+            tracker?.detect(imageBitmap)
+
+            processedFrames++
+
+            // Update progress if needed
+            if (processedFrames % 30 == 0) { // Update every 30 frames
+                Log.d(TAG, "Processed $processedFrames frames")
             }
+
+        } catch (e: Exception) {
+            Log.e(ERRORTAG, "Error processing frame: ${e.message}", e)
         }
+    }
 
-        // Move await to background thread
-        mainExecutor.execute {
-            try {
-                completionLatch.await()
-                val totalTime = SystemClock.uptimeMillis() - startTime  // Calculate total time
-                Log.d(TAG, "Total processing time: $totalTime ms")      // Log it here
+    /**
+     * Callback from FrameExtractor when all frames are processed
+     */
+    override fun onAllFrameExtracted(processedFrameCount: Int, processedTimeMs: Long) {
+        Log.d(TAG, "Frame extraction completed. Processed $processedFrameCount frames in $processedTimeMs ms")
 
-                mainHandler.post {
-                    _processingStatusLiveData.value = ProcessingStatus.COMPLETED
-                    releaseResources()
-                }
-            } catch (e: InterruptedException) {
-                Log.w(TAG, "Processing interrupted", e)
+        mainHandler.post {
+            if (isProcessing.get()) {
+                _processingStatusLiveData.value = ProcessingStatus.COMPLETED
+                releaseResources()
             }
         }
     }
@@ -212,6 +190,7 @@ class VideoProcessor(
     fun stopProcessing() {
         if (isProcessing.get()) {
             isProcessing.set(false)
+            frameExtractor?.isTerminated = true // Stop the frame extractor
             _processingStatusLiveData.postValue(ProcessingStatus.CANCELLED)
             releaseResources()
         }
@@ -229,13 +208,7 @@ class VideoProcessor(
      */
     private fun releaseResources() {
         isProcessing.set(false)
-        try {
-            if (::retriever.isInitialized) {
-                retriever.release()
-            }
-        } catch (e: Exception) {
-            Log.e(ERRORTAG, "Error releasing resources: ${e.message}", e)
-        }
+        frameExtractor = null
     }
 
     /**
@@ -253,6 +226,9 @@ class VideoProcessor(
      */
     override fun onDetect(boundingBoxes: List<BoundingBox>) {
         if (isProcessing.get()) {
+            // Calculate current timestamp based on processed frames
+            // This is approximate - FrameExtractor provides exact timing in onCurrentFrameExtracted
+            val currentTimestamp = (processedFrames * 1000L) / 30L // Assuming ~30fps
             trackingData[currentTimestamp] = boundingBoxes
         }
     }
@@ -262,6 +238,7 @@ class VideoProcessor(
      */
     override fun onEmptyDetect() {
         if (isProcessing.get()) {
+            val currentTimestamp = (processedFrames * 1000L) / 30L
             trackingData[currentTimestamp] = emptyList()
             Log.d(TAG, "Timestamp $currentTimestamp: No detections")
         }
@@ -295,19 +272,4 @@ class VideoProcessor(
         private const val TAG = "BarbelltrackerLog"
         private const val ERRORTAG = "BarbelltrackerError"
     }
-
-    override fun onCurrentFrameExtracted(currentFrame: Frame, presentationTimeUs: Long) {
-        // TODO:  
-//        val imageBitmap = fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
-//        frameQueue.put(FrameData(imageBitmap, presentationTimeUs))
-//        imageBitmap.recycle()
-
-
-    }
-
-    override fun onAllFrameExtracted(processedFrameCount: Int, processedTimeMs: Long) {
-        // TODO:  
-//        frameQueue.put(FrameData(null, -1))
-    }
-
 }

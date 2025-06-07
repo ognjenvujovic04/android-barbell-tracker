@@ -11,7 +11,7 @@ import java.io.IOException
 
 
 class FrameExtractor(private val listener: IVideoFrameExtractor) {
-    private var isTerminated = false
+    var isTerminated = false
 
     private val size = 1
     private val frameCount = Int.MAX_VALUE
