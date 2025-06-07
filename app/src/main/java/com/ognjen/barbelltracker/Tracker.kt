@@ -17,8 +17,8 @@ import org.tensorflow.lite.support.common.ops.NormalizeOp
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
-import SORT.HungarianAlgorithm
-import SORT.KalmanTracker
+import com.ognjen.barbelltracker.SORT.HungarianAlgorithm
+import com.ognjen.barbelltracker.SORT.KalmanTracker
 import kotlin.collections.ArrayList
 
 class Tracker(
@@ -265,7 +265,8 @@ class Tracker(
 
         // Create new trackers for unmatched detections
         for (detIdx in unmatchedDetections) {
-            val tracker = KalmanTracker(detectionRects[detIdx])
+            val tracker =
+                KalmanTracker(detectionRects[detIdx])
             trackers.add(tracker)
         }
 

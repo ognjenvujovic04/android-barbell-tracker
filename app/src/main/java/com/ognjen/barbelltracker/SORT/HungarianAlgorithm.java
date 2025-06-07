@@ -1,4 +1,4 @@
-package SORT;
+package com.ognjen.barbelltracker.SORT;
 
 import org.opencv.core.Mat;
 
