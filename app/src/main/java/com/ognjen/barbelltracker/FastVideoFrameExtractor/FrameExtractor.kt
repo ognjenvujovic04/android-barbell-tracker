@@ -244,7 +244,7 @@ class FrameExtractor(private val listener: IVideoFrameExtractor) {
                         if (decodeCount < MAX_FRAMES) {
                             val startWhen = System.nanoTime()
                             val currentFrame = outputSurface.retrieveFrame(decodeCount, presentationTimeUs)
-                            listener.onCurrentFrameExtracted(currentFrame)
+                            listener.onCurrentFrameExtracted(currentFrame, presentationTimeUs)
                             totalSavingTimeNs += System.nanoTime() - startWhen
                             if(verbose) Log.d(TAG, "$decodeCount / Max: $MAX_FRAMES")
                         }

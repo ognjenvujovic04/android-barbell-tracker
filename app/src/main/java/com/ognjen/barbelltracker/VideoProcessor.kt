@@ -2,14 +2,19 @@ package com.ognjen.barbelltracker
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.DisplayMetrics
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.ognjen.barbelltracker.FastVideoFrameExtractor.Frame
+import com.ognjen.barbelltracker.FastVideoFrameExtractor.IVideoFrameExtractor
+import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
@@ -23,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class VideoProcessor(
     private val context: Context,
     private val modelPath: String
-) : Tracker.TrackerListener {
+) : Tracker.TrackerListener, IVideoFrameExtractor {
 
     // Frame data class with timestamp
     private data class FrameData(val bitmap: Bitmap?, val timestamp: Long)
@@ -263,6 +268,19 @@ class VideoProcessor(
     }
 
     /**
+     * Get bitmap from ByteBuffer
+     */
+    private fun fromBufferToBitmap(buffer: ByteBuffer, width: Int, height: Int): Bitmap {
+        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        buffer.rewind()
+        result.copyPixelsFromBuffer(buffer)
+        val transformMatrix = Matrix()
+        val outputBitmap = Bitmap.createBitmap(result, 0, 0, result.width, result.height, transformMatrix, false)
+        outputBitmap.density = DisplayMetrics.DENSITY_DEFAULT
+        return outputBitmap
+    }
+
+    /**
      * Status class to represent the current state of video processing
      */
     sealed class ProcessingStatus {
@@ -277,4 +295,19 @@ class VideoProcessor(
         private const val TAG = "BarbelltrackerLog"
         private const val ERRORTAG = "BarbelltrackerError"
     }
+
+    override fun onCurrentFrameExtracted(currentFrame: Frame, presentationTimeUs: Long) {
+        // TODO:  
+//        val imageBitmap = fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
+//        frameQueue.put(FrameData(imageBitmap, presentationTimeUs))
+//        imageBitmap.recycle()
+
+
+    }
+
+    override fun onAllFrameExtracted(processedFrameCount: Int, processedTimeMs: Long) {
+        // TODO:  
+//        frameQueue.put(FrameData(null, -1))
+    }
+
 }
