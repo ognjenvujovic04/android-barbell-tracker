@@ -1,4 +1,4 @@
-package com.ducky.fastvideoframeextraction.decoder
+package com.ognjen.barbelltracker.FastVideoFrameExtractor
 
 import android.media.MediaCodec
 import android.media.MediaExtractor
@@ -255,7 +255,8 @@ class FrameExtractor(private val listener: IVideoFrameExtractor) {
         }
         val totalSavedFrames = if ((MAX_FRAMES < decodeCount)) MAX_FRAMES else decodeCount
 
-        if (verbose) Log.d(TAG, ("Total saved frames: $totalSavedFrames  " +
+        if (verbose) Log.d(
+            TAG, ("Total saved frames: $totalSavedFrames  " +
                 "| Total time: ${totalSavingTimeNs / 1000000} ms  " +
                 "| Each frame took: ${(totalSavingTimeNs / totalSavedFrames / 1000)} us "))
 

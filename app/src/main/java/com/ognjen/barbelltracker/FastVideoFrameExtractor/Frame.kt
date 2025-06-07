@@ -1,4 +1,4 @@
-package com.ducky.fastvideoframeextraction.decoder
+package com.ognjen.barbelltracker.FastVideoFrameExtractor
 
 import java.nio.ByteBuffer
 

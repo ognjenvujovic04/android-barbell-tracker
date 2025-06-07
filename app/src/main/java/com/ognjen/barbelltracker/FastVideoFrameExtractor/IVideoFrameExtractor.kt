@@ -1,4 +1,6 @@
-package com.ducky.fastvideoframeextraction.decoder
+package com.ognjen.barbelltracker.FastVideoFrameExtractor
+
+import com.ognjen.barbelltracker.FastVideoFrameExtractor.Frame
 
 /**
  * Created by Duc Ky Ngo on 9/13/2021.
