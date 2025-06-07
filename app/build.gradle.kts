@@ -46,8 +46,6 @@ dependencies {
     implementation(libs.litert.api)
     implementation(libs.litert)
     implementation(libs.opencv)
-    implementation(libs.ffmpeg.media.metadata.retriever.core)
-    implementation(libs.ffmpeg.media.metadata.retriever.native)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
