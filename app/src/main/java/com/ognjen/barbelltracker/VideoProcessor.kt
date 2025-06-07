@@ -1,6 +1,7 @@
 package com.ognjen.barbelltracker
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
@@ -45,6 +46,9 @@ class VideoProcessor(
 
     // FrameExtractor instance
     private var frameExtractor: FrameExtractor? = null
+
+    // Reusable bitmap
+    private var reusableBitmap: Bitmap? = null
 
     /**
      * Process a video file and extract barbell tracking data using FrameExtractor
@@ -129,11 +133,10 @@ class VideoProcessor(
         if (!isProcessing.get()) return
 
         try {
-            val imageBitmap = Utils.fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
-
+            reusableBitmap = Utils.fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
 
             // Process the frame with the tracker
-            tracker?.detect(imageBitmap)
+            tracker?.detect(reusableBitmap!!)
 
             processedFrames++
 
