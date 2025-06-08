@@ -32,7 +32,7 @@ class FrameExtractor(private val listener: IVideoFrameExtractor) {
         var width: Int
         var height: Int
         try {
-            val inputFile: File = File(inputFilePath)
+            val inputFile = File(inputFilePath)
 
             // Check whether the input file exist or not
             if (!inputFile.canRead()) {

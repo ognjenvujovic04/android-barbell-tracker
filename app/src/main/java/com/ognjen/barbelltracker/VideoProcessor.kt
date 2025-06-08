@@ -68,7 +68,7 @@ class VideoProcessor(
         _processingStatusLiveData.postValue(ProcessingStatus.STARTING)
 
         try {
-            tracker = tracker ?: Tracker(context, modelPath, this)
+            tracker = Tracker(context, modelPath, this)
 
             // Get video file path from URI
             val videoPath = Utils.getPath(context, videoUri)
