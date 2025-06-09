@@ -99,9 +99,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         button2.setOnClickListener {
-            Toast.makeText(this, "Button 2 clicked", Toast.LENGTH_SHORT).show()
             hidePopupVideo()
-            processVideo()
         }
 
         playButton.setOnClickListener {
