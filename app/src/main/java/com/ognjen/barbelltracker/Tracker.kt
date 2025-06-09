@@ -34,7 +34,10 @@ class Tracker(
     private var tensorHeight = 0
     private var numChannel = 0
     private var numElements = 0
+
     private var reusableBitmap: Bitmap? = null
+    private var reusableTensorImage: TensorImage? = null
+    private var reusableOutputBuffer: TensorBuffer? = null
 
     // SORT tracking variables
     private var trackers = ArrayList<KalmanTracker>()
@@ -85,9 +88,13 @@ class Tracker(
         if (outputShape != null) {
             numChannel = outputShape[1]
             numElements = outputShape[2]
+
+            reusableOutputBuffer = TensorBuffer.createFixedSize(intArrayOf(1, numChannel, numElements), OUTPUT_IMAGE_TYPE)
         }
 
         labels.add("barbell")
+
+        reusableTensorImage = TensorImage(INPUT_IMAGE_TYPE)
 
         // Initialize SORT tracking
         KalmanTracker.setKf_count(0)
@@ -109,23 +116,21 @@ class Tracker(
 
         // --- Image Preprocessing ---
         val ipSt = SystemClock.uptimeMillis()
-        val tensorImage = TensorImage(INPUT_IMAGE_TYPE)
-        tensorImage.load(reusableBitmap)
-        val processedImage = imageProcessor.process(tensorImage)
+        reusableTensorImage?.load(reusableBitmap)
+        val processedImage = imageProcessor.process(reusableTensorImage)
         val imageBuffer = processedImage.buffer
         val ipEt = SystemClock.uptimeMillis()
         val ipT = ipEt - ipSt
 
         // --- Model Inference ---
         val miSt = SystemClock.uptimeMillis()
-        val output = TensorBuffer.createFixedSize(intArrayOf(1, numChannel, numElements), OUTPUT_IMAGE_TYPE)
-        interpreter.run(imageBuffer, output.buffer)
+        interpreter.run(imageBuffer, reusableOutputBuffer!!.buffer)
         val miEt = SystemClock.uptimeMillis()
         val miT = miEt - miSt
 
         // --- Post-processing (bestBox, NMS) ---
         val ppSt = SystemClock.uptimeMillis()
-        val detectedBoxes = bestBox(output.floatArray)
+        val detectedBoxes = bestBox(reusableOutputBuffer!!.floatArray)
         val ppEt = SystemClock.uptimeMillis()
         val ppT = ppEt - ppSt
 
