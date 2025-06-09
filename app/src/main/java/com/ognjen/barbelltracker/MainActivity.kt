@@ -8,6 +8,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var popupContainer: ConstraintLayout
     private lateinit var button1: Button
     private lateinit var button2: Button
+    private lateinit var firstFrameView: ImageView
 
     private lateinit var videoProcessor: VideoProcessor
     private var selectedVideoUri: Uri? = null
@@ -60,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         popupContainer = findViewById(R.id.popupContainer)
         button1 = findViewById(R.id.button1)
         button2 = findViewById(R.id.button2)
+        firstFrameView = findViewById(R.id.firstFrameView)
 
         // Initialize views
         originalVideoView = findViewById(R.id.originalVideoView)
@@ -119,6 +122,23 @@ class MainActivity : AppCompatActivity() {
 
         // Show the popup
         popupContainer.visibility = View.VISIBLE
+
+        // Selecting barbell to be tracked
+        barbellSelection()
+
+    }
+
+    private fun barbellSelection() {
+        try
+        {
+            val firstFrame = videoProcessor.firstFrame(selectedVideoUri!!)
+
+            firstFrameView.setImageBitmap(firstFrame)
+        }catch (e: Exception) {
+            Log.e(ERRORTAG, "Error extracting first frame: ${e.message}")
+            Toast.makeText(this, "Failed to extract first frame", Toast.LENGTH_LONG).show()
+
+        }
     }
 
     private fun hidePopupVideo() {

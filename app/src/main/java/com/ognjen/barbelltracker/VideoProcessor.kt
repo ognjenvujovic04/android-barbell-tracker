@@ -191,6 +191,22 @@ class VideoProcessor(
         frameExtractor = null
     }
 
+    // todo with media retriever
+    fun firstFrame(videoUri: Uri): Bitmap? {
+        var bitmap: Bitmap? = null
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, videoUri)
+            // Get the first frame at time 0
+            bitmap = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } catch (e: Exception) {
+            Log.e(ERRORTAG, "Error getting first frame: ${e.message}", e)
+        } finally {
+            retriever.release()
+        }
+        return bitmap
+    }
+
     /**
      * Clean up resources when the processor is no longer needed
      */
