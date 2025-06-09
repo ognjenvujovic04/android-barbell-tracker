@@ -67,14 +67,7 @@
         android:layout_width="match_parent"
         app:layout_constraintDimensionRatio="1:1"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@id/boundingBoxTextView"
-        app:layout_constraintTop_toBottomOf="@id/progressLayout">
-
-        <VideoView
-            android:id="@+id/originalVideoView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone" />
+        app:layout_constraintBottom_toTopOf="@id/boundingBoxTextView">
 
         <VideoView
             android:id="@+id/processedVideoView"
@@ -144,7 +137,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginEnd="5dp"
-                    android:text="Button 1" />
+                    android:text="Select" />
 
                 <Button
                     android:id="@+id/button2"

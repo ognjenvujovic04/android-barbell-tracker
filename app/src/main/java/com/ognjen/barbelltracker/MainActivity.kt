@@ -24,7 +24,6 @@ import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var originalVideoView: VideoView
     private lateinit var processedVideoView: VideoView
     private lateinit var overlayView: OverlayView
     private lateinit var boundingBoxTextView: TextView
@@ -65,7 +64,6 @@ class MainActivity : AppCompatActivity() {
         firstFrameView = findViewById(R.id.firstFrameView)
 
         // Initialize views
-        originalVideoView = findViewById(R.id.originalVideoView)
         processedVideoView = findViewById(R.id.processedVideoView)
         overlayView = findViewById(R.id.overlay)
         boundingBoxTextView = findViewById(R.id.boundingBoxTextView)
@@ -106,10 +104,6 @@ class MainActivity : AppCompatActivity() {
             togglePlayback()
         }
 
-        // Setup video completion listener
-        originalVideoView.setOnCompletionListener {
-            stopPlayback()
-        }
     }
 
     private fun showPopupVideo() {
@@ -188,8 +182,7 @@ class MainActivity : AppCompatActivity() {
             // Stop any ongoing processing or playback
             stopProcessingAndPlayback()
 
-            // Set the video to both VideoViews
-            originalVideoView.setVideoURI(uri)
+            // Set the video to VideoViews
             processedVideoView.setVideoURI(uri)
 
             // Clear overlay
@@ -245,8 +238,7 @@ class MainActivity : AppCompatActivity() {
         isPlaying = true
         playButton.text = "Stop"
 
-        // Start both videos
-        originalVideoView.start()
+        // Start  videos
         processedVideoView.start()
 
         // Reset overlay
@@ -262,8 +254,6 @@ class MainActivity : AppCompatActivity() {
         isPlaying = false
         playButton.text = "Play"
 
-        // Stop videos
-        originalVideoView.pause()
         processedVideoView.pause()
 
         // Remove playback callback
@@ -371,8 +361,7 @@ class MainActivity : AppCompatActivity() {
             val uri = Uri.fromFile(file)
             selectedVideoUri = uri
 
-            // Set the video to both VideoViews
-            originalVideoView.setVideoURI(uri)
+            // Set the video to VideoViews
             processedVideoView.setVideoURI(uri)
 
             // Enable process button
