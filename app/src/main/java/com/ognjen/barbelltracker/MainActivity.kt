@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -13,6 +14,7 @@ import android.widget.VideoView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
 import org.opencv.android.OpenCVLoader
 import java.io.File
 import java.io.FileOutputStream
@@ -28,6 +30,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadFromGalleryButton: Button
     private lateinit var processButton: Button
     private lateinit var playButton: Button
+
+    private lateinit var popupContainer: ConstraintLayout
+    private lateinit var button1: Button
+    private lateinit var button2: Button
 
     private lateinit var videoProcessor: VideoProcessor
     private var selectedVideoUri: Uri? = null
@@ -49,6 +55,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             Log.d(TAG, "OpenCV loaded")
         }
+
+        // Initialize popup views
+        popupContainer = findViewById(R.id.popupContainer)
+        button1 = findViewById(R.id.button1)
+        button2 = findViewById(R.id.button2)
 
         // Initialize views
         originalVideoView = findViewById(R.id.originalVideoView)
@@ -74,6 +85,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         processButton.setOnClickListener {
+            showPopupVideo()
+        }
+
+        // Set click listeners for popup buttons
+        button1.setOnClickListener {
+            Toast.makeText(this, "Button 1 clicked", Toast.LENGTH_SHORT).show()
+            hidePopupVideo()
+            processVideo()
+        }
+
+        button2.setOnClickListener {
+            Toast.makeText(this, "Button 2 clicked", Toast.LENGTH_SHORT).show()
+            hidePopupVideo()
             processVideo()
         }
 
@@ -85,6 +109,20 @@ class MainActivity : AppCompatActivity() {
         originalVideoView.setOnCompletionListener {
             stopPlayback()
         }
+    }
+
+    private fun showPopupVideo() {
+        if (selectedVideoUri == null) {
+            Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Show the popup
+        popupContainer.visibility = View.VISIBLE
+    }
+
+    private fun hidePopupVideo() {
+        popupContainer.visibility = View.GONE
     }
 
     @SuppressLint("SetTextI19n", "SetTextI18n")
