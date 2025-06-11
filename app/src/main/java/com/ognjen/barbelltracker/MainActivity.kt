@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var button1: Button
     private lateinit var button2: Button
     private lateinit var firstFrameView: ImageView
+    private lateinit var textViewPopup: TextView
 
     private lateinit var videoProcessor: VideoProcessor
     private var selectedVideoUri: Uri? = null
@@ -62,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         button1 = findViewById(R.id.button1)
         button2 = findViewById(R.id.button2)
         firstFrameView = findViewById(R.id.firstFrameView)
+        textViewPopup = findViewById(R.id.textViewPopup)
 
         // Initialize views
         processedVideoView = findViewById(R.id.processedVideoView)
@@ -124,6 +126,29 @@ class MainActivity : AppCompatActivity() {
         try
         {
             val firstFrame = videoProcessor.firstFrame(selectedVideoUri!!)
+
+            val result = videoProcessor.getFirstTrackingBoxes()
+
+            val detectionTextBuilder = StringBuilder()
+
+            // Log and display each detection with enumeration
+            result.forEachIndexed { index, boundingBox ->
+                // Format the detection information
+                val bboxText = """
+            Detection ${index + 1}:
+            Normalized: x1: ${boundingBox.x1.format(4)}, y1: ${boundingBox.y1.format(4)},
+                       x2: ${boundingBox.x2.format(4)}, y2: ${boundingBox.y2.format(4)}
+            Confidence: ${boundingBox.cnf.format(4)}
+            ID: ${boundingBox.id}
+            --------------------------
+            """.trimIndent()
+
+                // Append to the StringBuilder for display
+                detectionTextBuilder.append(bboxText).append("\n")
+            }
+
+            // Display all detections in the text box
+            textViewPopup.text = detectionTextBuilder.toString()
 
             firstFrameView.setImageBitmap(firstFrame)
         }catch (e: Exception) {
@@ -189,6 +214,7 @@ class MainActivity : AppCompatActivity() {
             overlayView.clear()
 
             // Reset tracking data
+            //todo reset whole tracker, video loading
             trackingData = emptyMap()
 
             // Enable process button

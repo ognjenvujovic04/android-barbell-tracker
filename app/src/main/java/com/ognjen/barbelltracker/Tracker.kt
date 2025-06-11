@@ -100,7 +100,7 @@ class Tracker(
         KalmanTracker.setKf_count(0)
     }
 
-    fun detect(frame: Bitmap) {
+    fun detect(frame: Bitmap, isFirst: Boolean = false ) {
         if (tensorWidth == 0 || tensorHeight == 0 || numElements == 0 || numChannel == 0) {
             Log.w(TAG, "Model dimensions not initialized, skipping detection")
             return
@@ -149,7 +149,11 @@ class Tracker(
         // Apply SORT tracking
         val trackedBoxes = updateTrackers(detectedBoxes, frame.width, frame.height)
 
-        trackerListener.onDetect(trackedBoxes)
+        if (!isFirst){
+            trackerListener.onDetect(trackedBoxes)
+        } else {
+            trackerListener.onFirstDetect(trackedBoxes)
+        }
     }
 
     private fun updateTrackersWithNoDetections(frameWidth: Int, frameHeight: Int): List<BoundingBox>? {
@@ -415,6 +419,7 @@ class Tracker(
     interface TrackerListener {
         fun onEmptyDetect()
         fun onDetect(boundingBoxes: List<BoundingBox>)
+        fun onFirstDetect(boundingBoxes: List<BoundingBox>)
     }
 
     companion object {

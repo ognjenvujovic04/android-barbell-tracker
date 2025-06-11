@@ -30,6 +30,9 @@ class VideoProcessor(
     // Tracking data - maps time (milliseconds) to detected bounding boxes
     private val trackingData = mutableMapOf<Long, List<BoundingBox>>()
 
+    // FirstTrackingBoxes - detections on first frame
+    private val firstTrackingBoxes = mutableListOf<BoundingBox>()
+
     // Processing state
     private val isProcessing = AtomicBoolean(false)
     private var videoDuration: Long = 0
@@ -199,6 +202,14 @@ class VideoProcessor(
             retriever.setDataSource(context, videoUri)
             // Get the first frame at time 0
             bitmap = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            if (bitmap == null) {
+                Log.e(ERRORTAG, "Failed to retrieve first frame from video")
+            } else {
+                tracker = Tracker(context, modelPath, this)
+                val processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                tracker?.detect(processedBitmap, true) // Run detection on the first frame
+
+            }
         } catch (e: Exception) {
             Log.e(ERRORTAG, "Error getting first frame: ${e.message}", e)
         } finally {
@@ -218,6 +229,13 @@ class VideoProcessor(
     }
 
     /**
+     * Get the first tracking boxes detected on the first frame
+     */
+    fun getFirstTrackingBoxes(): List<BoundingBox> {
+        return firstTrackingBoxes.toList()
+    }
+
+    /**
      * Callback from BarbellDetector when object detection yields results
      */
     override fun onDetect(boundingBoxes: List<BoundingBox>) {
@@ -227,6 +245,14 @@ class VideoProcessor(
             val currentTimestamp = (processedFrames * 1000L) / 30L // Assuming ~30fps
             trackingData[currentTimestamp] = boundingBoxes
         }
+    }
+
+    /**
+     * Callback from BarbellDetector when running model on first frame
+     */
+    override fun onFirstDetect(boundingBoxes: List<BoundingBox>) {
+        firstTrackingBoxes.clear()
+        firstTrackingBoxes.addAll(boundingBoxes)
     }
 
     /**
