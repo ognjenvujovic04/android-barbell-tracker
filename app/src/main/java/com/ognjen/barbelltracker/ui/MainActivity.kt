@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker
+package com.ognjen.barbelltracker.ui
 
 import android.annotation.SuppressLint
 import android.net.Uri
@@ -16,6 +16,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import com.ognjen.barbelltracker.R
+import com.ognjen.barbelltracker.domain.BoundingBox
+import com.ognjen.barbelltracker.domain.VideoProcessor
 import org.opencv.android.OpenCVLoader
 import java.io.File
 import java.io.FileOutputStream
@@ -74,7 +77,7 @@ class MainActivity : AppCompatActivity() {
         playButton = findViewById(R.id.playButton) // You'll need to add this to your layout
 
         // Initialize VideoProcessor
-        videoProcessor = VideoProcessor(this, "best_320_float32.tflite")
+        videoProcessor = VideoProcessor(this, "models/best_320_float32.tflite")
 
         // Set the default video from assets
         setDefaultVideoFromAssets()

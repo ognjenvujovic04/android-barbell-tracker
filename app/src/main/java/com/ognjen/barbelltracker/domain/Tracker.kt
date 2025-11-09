@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker
+package com.ognjen.barbelltracker.domain
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -17,8 +17,8 @@ import org.tensorflow.lite.support.common.ops.NormalizeOp
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
-import com.ognjen.barbelltracker.SORT.HungarianAlgorithm
-import com.ognjen.barbelltracker.SORT.KalmanTracker
+import com.ognjen.barbelltracker.domain.SORT.HungarianAlgorithm
+import com.ognjen.barbelltracker.domain.SORT.KalmanTracker
 import kotlin.collections.ArrayList
 
 class Tracker(
@@ -239,7 +239,8 @@ class Tracker(
 
         // Apply Hungarian algorithm for assignment
         val assignment = ArrayList<Int>()
-        val hungarianAlgo = HungarianAlgorithm()
+        val hungarianAlgo =
+            HungarianAlgorithm()
         hungarianAlgo.Solve(iouMatrix, assignment)
 
         // Unmatched detections and trackers
@@ -275,7 +276,9 @@ class Tracker(
         // Create new trackers for unmatched detections
         for (detIdx in unmatchedDetections) {
             val tracker =
-                KalmanTracker(detectionRects[detIdx])
+                KalmanTracker(
+                    detectionRects[detIdx]
+                )
             trackers.add(tracker)
         }
 

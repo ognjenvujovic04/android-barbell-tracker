@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker.FastVideoFrameExtractor
+package com.ognjen.barbelltracker.domain.FastVideoFrameExtractor
 
 import android.media.MediaCodec
 import android.media.MediaExtractor

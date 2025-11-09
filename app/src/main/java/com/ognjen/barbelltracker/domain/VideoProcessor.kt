@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker
+package com.ognjen.barbelltracker.domain
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -10,10 +10,10 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.ognjen.barbelltracker.FastVideoFrameExtractor.Frame
-import com.ognjen.barbelltracker.FastVideoFrameExtractor.FrameExtractor
-import com.ognjen.barbelltracker.FastVideoFrameExtractor.IVideoFrameExtractor
-import com.ognjen.barbelltracker.FastVideoFrameExtractor.Utils
+import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.Frame
+import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.FrameExtractor
+import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.IVideoFrameExtractor
+import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.Utils
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -112,7 +112,8 @@ class VideoProcessor(
                 } catch (e: Exception) {
                     Log.e(ERRORTAG, "Frame extraction error: ${e.message}", e)
                     mainHandler.post {
-                        _processingStatusLiveData.value = ProcessingStatus.ERROR(e.message ?: "Frame extraction failed")
+                        _processingStatusLiveData.value =
+                            ProcessingStatus.ERROR(e.message ?: "Frame extraction failed")
                     }
                 } finally {
                     val totalTime = SystemClock.uptimeMillis() - startTime
@@ -122,7 +123,11 @@ class VideoProcessor(
 
         } catch (e: Exception) {
             Log.e(ERRORTAG, "Init error: ${e.message}", e)
-            _processingStatusLiveData.postValue(ProcessingStatus.ERROR(e.message ?: "Unknown error"))
+            _processingStatusLiveData.postValue(
+                ProcessingStatus.ERROR(
+                    e.message ?: "Unknown error"
+                )
+            )
             releaseResources()
         }
 

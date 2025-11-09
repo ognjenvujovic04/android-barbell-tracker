@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker.SORT;
+package com.ognjen.barbelltracker.domain.SORT;
 
 import org.opencv.core.Mat;
 

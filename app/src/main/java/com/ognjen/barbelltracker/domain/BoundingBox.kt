@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker
+package com.ognjen.barbelltracker.domain
 
 data class BoundingBox(
     val x1: Float,  // Top-left x coordinate

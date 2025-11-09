@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker.FastVideoFrameExtractor
+package com.ognjen.barbelltracker.domain.FastVideoFrameExtractor
 
 /**
  * Created by Duc Ky Ngo on 9/13/2021.

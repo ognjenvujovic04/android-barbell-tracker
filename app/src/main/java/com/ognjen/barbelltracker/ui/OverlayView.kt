@@ -1,4 +1,4 @@
-package com.ognjen.barbelltracker
+package com.ognjen.barbelltracker.ui
 
 import android.content.Context
 import android.graphics.Canvas
@@ -10,6 +10,8 @@ import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
+import com.ognjen.barbelltracker.R
+import com.ognjen.barbelltracker.domain.BoundingBox
 
 class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
