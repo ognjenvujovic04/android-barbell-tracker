@@ -76,7 +76,7 @@
             android:layout_alignParentStart="true"
             android:layout_alignParentTop="true" />
 
-        <com.ognjen.barbelltracker.OverlayView
+        <com.ognjen.barbelltracker.ui.OverlayView
             android:id="@+id/overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
