@@ -40,8 +40,7 @@ class BarbellSelectionPopup(
                 Toast.makeText(context, "Please select a barbell first", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            //todo
-//            videoProcessor.setSelectedBarbell(selectedBox!!)
+            videoProcessor.selectedBarbellId = selectedBox?.id
             hide()
             onBarbellSelectedListener?.invoke()
         }
@@ -111,10 +110,6 @@ class BarbellSelectionPopup(
         }
 
         textViewPopup.text = detectionTextBuilder.toString()
-    }
-
-    private fun displayFirstFrame(bitmap: Bitmap) {
-        firstFrameView.setImageBitmap(bitmap)
     }
 
     fun setOnBarbellSelectedListener(listener: () -> Unit) {

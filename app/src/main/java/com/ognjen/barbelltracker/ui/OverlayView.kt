@@ -31,6 +31,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     // For drawing the path
     private val pathLine = Path()
 
+    private var selectedBarbellId: Int? = null
+
+    fun setSelectedBarbellId(id: Int?) {
+        selectedBarbellId = id
+    }
+
     init {
         initPaints()
     }
@@ -130,10 +136,14 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     }
 
     fun setResults(boundingBoxes: List<BoundingBox>) {
-        results = boundingBoxes
+        results = if (selectedBarbellId != null) {
+            boundingBoxes.filter { it.id == selectedBarbellId }
+        } else {
+            boundingBoxes
+        }
 
         // Update center points for path tracking
-        updateCenterPoints(boundingBoxes)
+        updateCenterPoints(results)
 
         invalidate()
     }

@@ -114,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetTextI19n")
+    @SuppressLint("SetTextI19n", "SetTextI18n")
     private fun setupObservers() {
         videoProcessor.processingStatusLiveData.observe(this) { status ->
             when (status) {
@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity() {
 
                     // Get tracking data and pass it to playback controller
                     val trackingData = videoProcessor.getTrackingData()
+                    overlayView.setSelectedBarbellId(videoProcessor.selectedBarbellId)
                     videoPlaybackController.setTrackingData(trackingData)
 
                     Toast.makeText(

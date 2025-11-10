@@ -33,6 +33,8 @@ class VideoProcessor(
     // FirstTrackingBoxes - detections on first frame
     private val firstTrackingBoxes = mutableListOf<BoundingBox>()
 
+    var selectedBarbellId: Int? = null
+
     // Processing state
     private val isProcessing = AtomicBoolean(false)
     private var videoDuration: Long = 0
