@@ -109,30 +109,54 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-
-        <RelativeLayout
+        <!-- Changed to LinearLayout with proper layout_weight support -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_margin="20dp"
-            android:background="@android:color/white">
+            android:background="@android:color/white"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
-            <ImageView
-                android:id="@+id/firstFrameView"
+            <!-- Frame with overlay - now properly uses layout_weight -->
+            <RelativeLayout
+                android:id="@+id/frameWithOverlay"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:adjustViewBounds="true"
-                />
+                android:layout_height="0dp"
+                android:layout_weight="1">
 
+                <ImageView
+                    android:id="@+id/firstFrameView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitCenter" />
+
+                <com.ognjen.barbelltracker.ui.SelectionOverlayView
+                    android:id="@+id/overlaySelectionView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </RelativeLayout>
+
+            <!-- Text info -->
             <TextView
                 android:id="@+id/textViewPopup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Placeholder" />
+                android:text="Detected bounding boxes"
+                android:padding="8dp"
+                android:textColor="@android:color/black"
+                android:textSize="14sp" />
 
+            <!-- Buttons -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_alignParentBottom="true"
                 android:orientation="horizontal"
                 android:padding="10dp">
 
@@ -152,7 +176,9 @@
                     android:layout_marginStart="5dp"
                     android:text="Cancel" />
             </LinearLayout>
-        </RelativeLayout>
+
+        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -20,19 +20,28 @@ class BarbellSelectionPopup(
     private val button1: Button,
     private val button2: Button,
     private val firstFrameView: ImageView,
-    private val textViewPopup: TextView
+    private val textViewPopup: TextView,
+    private val overlaySelectionView: SelectionOverlayView
 ) {
 
     private var onBarbellSelectedListener: (() -> Unit)? = null
     private var onCancelListener: (() -> Unit)? = null
+    private var selectedBox: BoundingBox? = null
 
     init {
         setupListeners()
+        // Pass the ImageView reference to the overlay
+        overlaySelectionView.setImageView(firstFrameView)
     }
 
     private fun setupListeners() {
         button1.setOnClickListener {
-            Toast.makeText(context, "Button 1 clicked", Toast.LENGTH_SHORT).show()
+            if (selectedBox == null) {
+                Toast.makeText(context, "Please select a barbell first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            //todo
+//            videoProcessor.setSelectedBarbell(selectedBox!!)
             hide()
             onBarbellSelectedListener?.invoke()
         }
@@ -64,12 +73,21 @@ class BarbellSelectionPopup(
     private fun performBarbellSelection(videoUri: Uri) {
         try {
             val firstFrame = videoProcessor.firstFrame(videoUri)
-            val result = videoProcessor.getFirstTrackingBoxes()
+            val detections = videoProcessor.getFirstTrackingBoxes()
 
-            displayBoundingBoxes(result)
-            if (firstFrame != null) {
-                displayFirstFrame(firstFrame)
+            firstFrameView.setImageBitmap(firstFrame)
+
+            // Set boxes and invalidate after the image is set
+            overlaySelectionView.post {
+                overlaySelectionView.setBoxes(detections)
             }
+
+            overlaySelectionView.setOnBoxSelectedListener { box ->
+                selectedBox = box
+                Toast.makeText(context, "Selected ID: ${box.id}", Toast.LENGTH_SHORT).show()
+            }
+
+            displayBoundingBoxes(detections)
         } catch (e: Exception) {
             Log.e(ERRORTAG, "Error extracting first frame: ${e.message}")
             Toast.makeText(context, "Failed to extract first frame", Toast.LENGTH_LONG).show()

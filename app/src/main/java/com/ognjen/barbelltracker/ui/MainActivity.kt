@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var videoProcessor: VideoProcessor
     private lateinit var barbellSelectionPopup: BarbellSelectionPopup
+    private lateinit var selectionOverlayView: SelectionOverlayView
     private lateinit var videoPlaybackController: VideoPlaybackController
 
     private var selectedVideoUri: Uri? = null
@@ -72,6 +73,7 @@ class MainActivity : AppCompatActivity() {
 
         // Popup views
         popupContainer = findViewById(R.id.popupContainer)
+        selectionOverlayView = findViewById(R.id.overlaySelectionView)
         button1 = findViewById(R.id.button1)
         button2 = findViewById(R.id.button2)
         firstFrameView = findViewById(R.id.firstFrameView)
@@ -98,7 +100,8 @@ class MainActivity : AppCompatActivity() {
             button1,
             button2,
             firstFrameView,
-            textViewPopup
+            textViewPopup,
+            selectionOverlayView
         )
 
         // Set popup listeners
