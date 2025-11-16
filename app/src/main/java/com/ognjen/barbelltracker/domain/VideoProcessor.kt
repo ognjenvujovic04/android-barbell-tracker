@@ -6,10 +6,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.Frame
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.FrameExtractor
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.IVideoFrameExtractor
@@ -18,274 +15,183 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * A class that processes videos to track barbell paths using the BarbellDetector class.
- * It extracts frames from a video using hardware-accelerated FrameExtractor, processes them
- * with object detection, and stores tracking data in a timestamp-based map for efficient playback.
+ * Isolated VideoProcessor class.
+ *
+ * Works standalone in Kotlin and is ready for bridging to React Native.
  */
 class VideoProcessor(
     private val context: Context,
     private val modelPath: String
 ) : Tracker.TrackerListener, IVideoFrameExtractor {
 
-    // Tracking data - maps time (milliseconds) to detected bounding boxes
+    // =========================================================
+    // Internal State
+    // =========================================================
     private val trackingData = mutableMapOf<Long, List<BoundingBox>>()
-
-    // FirstTrackingBoxes - detections on first frame
     private val firstTrackingBoxes = mutableListOf<BoundingBox>()
+    private var tracker: Tracker? = null
+    private var frameExtractor: FrameExtractor? = null
 
     var selectedBarbellId: Int? = null
 
     // Processing state
     private val isProcessing = AtomicBoolean(false)
-    private var videoDuration: Long = 0
-    private var processedFrames: Int = 0
+    private var processedFrames = 0
 
-    private val executorService = Executors.newSingleThreadExecutor()
+    private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val _processingStatusLiveData = MutableLiveData<ProcessingStatus>()
-    val processingStatusLiveData: LiveData<ProcessingStatus> = _processingStatusLiveData
-
-    // Tracker instance
-    private var tracker: Tracker? = null
-
-    // FrameExtractor instance
-    private var frameExtractor: FrameExtractor? = null
-
-    // Reusable bitmap
     private var reusableBitmap: Bitmap? = null
 
-    /**
-     * Process a video file and extract barbell tracking data using FrameExtractor
-     *
-     * @param videoUri Uri of the video to process
-     * @return Map of timestamps to bounding boxes after processing is complete
-     */
-    fun processVideo(videoUri: Uri): Map<Long, List<BoundingBox>> {
+    fun processVideoAsync(
+        uri: Uri,
+        onProgress: (Int) -> Unit,
+        onComplete: (Map<Long, List<BoundingBox>>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        executor.execute {
+            try {
+                val result = processVideo(uri, onProgress)
+                mainHandler.post { onComplete(result) }
+            } catch (e: Exception) {
+                mainHandler.post { onError(e.message ?: "Unknown error") }
+            }
+        }
+    }
+
+    private fun processVideo(
+        videoUri: Uri,
+        onProgress: ((Int) -> Unit)? = null
+    ): Map<Long, List<BoundingBox>> {
+
         if (isProcessing.get()) {
-            Log.w(TAG, "Already processing a video, cannot start another process")
+            Log.w(TAG, "Already processing video")
             return emptyMap()
         }
 
-        // Reset state
         trackingData.clear()
         processedFrames = 0
-        _processingStatusLiveData.postValue(ProcessingStatus.STARTING)
 
-        try {
-            tracker = Tracker(context, modelPath, this)
+        val videoPath = Utils.getPath(context, videoUri)
+            ?: throw Exception("Cannot resolve video path")
 
-            // Get video file path from URI
-            val videoPath = Utils.getPath(context, videoUri)
-            if (videoPath == null) {
-                _processingStatusLiveData.postValue(ProcessingStatus.ERROR("Cannot get video file path"))
-                return emptyMap()
-            }
-
-            // Get video metadata using MediaMetadataRetriever (only for duration info)
-            val retriever = MediaMetadataRetriever().apply {
-                setDataSource(context, videoUri)
-            }
-
-            val durationString = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            videoDuration = durationString?.toLong() ?: 0L
-            Log.d(TAG, "Video duration: $videoDuration ms")
-
-            retriever.release()
-
-            if (videoDuration <= 0) {
-                _processingStatusLiveData.postValue(ProcessingStatus.ERROR("Invalid video duration"))
-                return emptyMap()
-            }
-
-            // Create FrameExtractor instance
-            frameExtractor = FrameExtractor(this)
-
-            // Start processing in background
-            isProcessing.set(true)
-            _processingStatusLiveData.postValue(ProcessingStatus.PROCESSING)
-
-            executorService.execute {
-                val startTime = SystemClock.uptimeMillis()
-
-                try {
-                    // Start frame extraction - this will call our callbacks
-                    frameExtractor?.extractFrames(videoPath)
-                } catch (e: Exception) {
-                    Log.e(ERRORTAG, "Frame extraction error: ${e.message}", e)
-                    mainHandler.post {
-                        _processingStatusLiveData.value =
-                            ProcessingStatus.ERROR(e.message ?: "Frame extraction failed")
-                    }
-                } finally {
-                    val totalTime = SystemClock.uptimeMillis() - startTime
-                    Log.d(TAG, "Total processing time: $totalTime ms")
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e(ERRORTAG, "Init error: ${e.message}", e)
-            _processingStatusLiveData.postValue(
-                ProcessingStatus.ERROR(
-                    e.message ?: "Unknown error"
-                )
-            )
-            releaseResources()
+        // Get video metadata
+        val retriever = MediaMetadataRetriever().apply {
+            setDataSource(context, videoUri)
         }
+        val videoDuration = retriever
+            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            ?.toLong() ?: 0L
+        retriever.release()
+
+        tracker = Tracker(context, modelPath, this)
+        frameExtractor = FrameExtractor(this)
+
+        isProcessing.set(true)
+
+        // Frame extraction starts (callbacks fill trackingData)
+        frameExtractor!!.extractFrames(videoPath)
 
         return trackingData
     }
 
-    /**
-     * Callback from FrameExtractor when a frame is extracted
-     */
-    override fun onCurrentFrameExtracted(currentFrame: Frame, presentationTimeUs: Long) {
-        if (!isProcessing.get()) return
-
-        try {
-            reusableBitmap = Utils.fromBufferToBitmap(currentFrame.byteBuffer, currentFrame.width, currentFrame.height)
-
-            // Process the frame with the tracker
-            tracker?.detect(reusableBitmap!!)
-
-            processedFrames++
-
-            // Update progress if needed
-            if (processedFrames % 30 == 0) { // Update every 30 frames
-                Log.d(TAG, "Processed $processedFrames frames")
-            }
-
-        } catch (e: Exception) {
-            Log.e(ERRORTAG, "Error processing frame: ${e.message}", e)
-        }
-    }
-
-    /**
-     * Callback from FrameExtractor when all frames are processed
-     */
-    override fun onAllFrameExtracted(processedFrameCount: Int, processedTimeMs: Long) {
-        Log.d(TAG, "Frame extraction completed. Processed $processedFrameCount frames in $processedTimeMs ms")
-
-        mainHandler.post {
-            if (isProcessing.get()) {
-                _processingStatusLiveData.value = ProcessingStatus.COMPLETED
-                releaseResources()
-            }
-        }
-    }
-
-    /**
-     * Stop processing if currently running
-     */
-    fun stopProcessing() {
-        if (isProcessing.get()) {
-            isProcessing.set(false)
-            frameExtractor?.isTerminated = true // Stop the frame extractor
-            _processingStatusLiveData.postValue(ProcessingStatus.CANCELLED)
-            releaseResources()
-        }
-    }
-
-    /**
-     * Get the tracking data map. This contains timestamp-to-bounding-box mappings.
-     */
-    fun getTrackingData(): Map<Long, List<BoundingBox>> {
-        return trackingData.toMap()
-    }
-
-    /**
-     * Release resources when processing is complete
-     */
-    private fun releaseResources() {
-        isProcessing.set(false)
-        frameExtractor = null
-    }
-
-    // todo with media retriever
     fun firstFrame(videoUri: Uri): Bitmap? {
         var bitmap: Bitmap? = null
         val retriever = MediaMetadataRetriever()
+
         try {
             retriever.setDataSource(context, videoUri)
-            // Get the first frame at time 0
-            bitmap = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+
+            // Extract first frame (time = 0)
+            bitmap = retriever.getFrameAtTime(
+                0,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+            )
+
             if (bitmap == null) {
                 Log.e(ERRORTAG, "Failed to retrieve first frame from video")
-            } else {
-                tracker = Tracker(context, modelPath, this)
-                val processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                tracker?.detect(processedBitmap, true) // Run detection on the first frame
-
+                return null
             }
+
+            // Use a temporary tracker so we don't conflict with main processing tracker
+            val tempTracker = Tracker(context, modelPath, this)
+
+            // Make a safe copy for detection
+            val processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+
+            // Run detection telling tracker it is first frame
+            tempTracker.detect(processedBitmap, true)
+
+            // Close temp tracker
+            tempTracker.close()
+
         } catch (e: Exception) {
             Log.e(ERRORTAG, "Error getting first frame: ${e.message}", e)
         } finally {
             retriever.release()
         }
+
         return bitmap
     }
 
-    /**
-     * Clean up resources when the processor is no longer needed
-     */
-    fun close() {
-        stopProcessing()
-        tracker?.close()
-        tracker = null
-        executorService.shutdown()
-    }
-
-    /**
-     * Get the first tracking boxes detected on the first frame
-     */
     fun getFirstTrackingBoxes(): List<BoundingBox> {
         return firstTrackingBoxes.toList()
     }
 
-    /**
-     * Callback from BarbellDetector when object detection yields results
-     */
-    override fun onDetect(boundingBoxes: List<BoundingBox>) {
-        if (isProcessing.get()) {
-            // Calculate current timestamp based on processed frames
-            // This is approximate - FrameExtractor provides exact timing in onCurrentFrameExtracted
-            val currentTimestamp = (processedFrames * 1000L) / 30L // Assuming ~30fps
-            trackingData[currentTimestamp] = boundingBoxes
+    override fun onCurrentFrameExtracted(currentFrame: Frame, presentationTimeUs: Long) {
+        if (!isProcessing.get()) return
+
+        try {
+            reusableBitmap = Utils.fromBufferToBitmap(
+                currentFrame.byteBuffer,
+                currentFrame.width,
+                currentFrame.height
+            )
+            tracker?.detect(reusableBitmap!!)
+            processedFrames++
+
+        } catch (e: Exception) {
+            Log.e(ERRORTAG, "Frame error: ${e.message}", e)
         }
     }
 
-    /**
-     * Callback from BarbellDetector when running model on first frame
-     */
+    override fun onAllFrameExtracted(processedFrameCount: Int, processedTimeMs: Long) {
+        isProcessing.set(false)
+        frameExtractor = null
+        tracker?.close()
+    }
+
+    override fun onDetect(boundingBoxes: List<BoundingBox>) {
+        if (!isProcessing.get()) return
+        val timestamp = (processedFrames * 1000L) / 30L
+        trackingData[timestamp] = boundingBoxes
+    }
+
+    override fun onEmptyDetect() {
+        val timestamp = (processedFrames * 1000L) / 30L
+        trackingData[timestamp] = emptyList()
+    }
+
     override fun onFirstDetect(boundingBoxes: List<BoundingBox>) {
         firstTrackingBoxes.clear()
         firstTrackingBoxes.addAll(boundingBoxes)
     }
 
-    /**
-     * Callback from BarbellDetector when no objects are detected
-     */
-    override fun onEmptyDetect() {
+    fun stopProcessing() {
         if (isProcessing.get()) {
-            val currentTimestamp = (processedFrames * 1000L) / 30L
-            trackingData[currentTimestamp] = emptyList()
-            Log.d(TAG, "Timestamp $currentTimestamp: No detections")
+            isProcessing.set(false)
+            frameExtractor?.isTerminated = true
         }
     }
 
-    /**
-     * Status class to represent the current state of video processing
-     */
-    sealed class ProcessingStatus {
-        data object STARTING : ProcessingStatus()
-        data object PROCESSING : ProcessingStatus()
-        data object COMPLETED : ProcessingStatus()
-        data object CANCELLED : ProcessingStatus()
-        data class ERROR(val message: String) : ProcessingStatus()
+    fun close() {
+        stopProcessing()
+        tracker?.close()
+        executor.shutdown()
     }
 
     companion object {
-        private const val TAG = "BarbelltrackerLog"
-        private const val ERRORTAG = "BarbelltrackerError"
+        const val TAG = "VideoProcessor"
+        const val ERRORTAG = "VideoProcessorError"
     }
 }

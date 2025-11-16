@@ -1,6 +1,5 @@
 package com.ognjen.barbelltracker.ui
 
-import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -49,7 +48,6 @@ class MainActivity : AppCompatActivity() {
         initializeOpenCV()
         initializeViews()
         initializeComponents()
-        setupObservers()
         setupButtonListeners()
         setDefaultVideoFromAssets()
     }
@@ -114,48 +112,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetTextI19n", "SetTextI18n")
-    private fun setupObservers() {
-        videoProcessor.processingStatusLiveData.observe(this) { status ->
-            when (status) {
-                is VideoProcessor.ProcessingStatus.STARTING -> {
-                    processButton.text = "Cancel Processing"
-                    videoPlaybackController.enablePlayButton(false)
-                }
-                is VideoProcessor.ProcessingStatus.PROCESSING -> {
-                    // Status already handled by progress updates
-                }
-                is VideoProcessor.ProcessingStatus.COMPLETED -> {
-                    processButton.text = "Process Video"
-                    videoPlaybackController.enablePlayButton(true)
-
-                    // Get tracking data and pass it to playback controller
-                    val trackingData = videoProcessor.getTrackingData()
-                    overlayView.setSelectedBarbellId(videoProcessor.selectedBarbellId)
-                    videoPlaybackController.setTrackingData(trackingData)
-
-                    Toast.makeText(
-                        this,
-                        "Processing complete! ${trackingData.size} frames processed",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                    videoPlaybackController.start()
-                }
-                is VideoProcessor.ProcessingStatus.CANCELLED -> {
-                    processButton.text = "Process Video"
-                    videoPlaybackController.enablePlayButton(false)
-                    Toast.makeText(this, "Processing cancelled", Toast.LENGTH_SHORT).show()
-                }
-                is VideoProcessor.ProcessingStatus.ERROR -> {
-                    processButton.text = "Process Video"
-                    videoPlaybackController.enablePlayButton(false)
-                    Toast.makeText(this, "Error: ${status.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
-
     private fun setupButtonListeners() {
         loadFromGalleryButton.setOnClickListener {
             openGallery()
@@ -199,22 +155,50 @@ class MainActivity : AppCompatActivity() {
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
         )
     }
-
     private fun processVideo() {
-        if (selectedVideoUri == null) {
+        val uri = selectedVideoUri
+        if (uri == null) {
             Toast.makeText(this, "No video selected", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // If already processing, stop
-        if (videoProcessor.processingStatusLiveData.value is VideoProcessor.ProcessingStatus.PROCESSING) {
-            videoProcessor.stopProcessing()
-            return
-        }
+        processButton.text = "Processing..."
+        videoPlaybackController.enablePlayButton(false)
 
-        // Start processing the video
-        videoProcessor.processVideo(selectedVideoUri!!)
+        videoProcessor.processVideoAsync(
+            uri = uri,
+            onProgress = { progress ->
+                // Optional: show progress percentage
+                runOnUiThread {
+                    processButton.text = "Processing $progress%"
+                }
+            },
+            onComplete = { trackingData ->
+                runOnUiThread {
+                    processButton.text = "Process Video"
+                    videoPlaybackController.enablePlayButton(true)
+
+                    overlayView.setSelectedBarbellId(videoProcessor.selectedBarbellId)
+                    videoPlaybackController.setTrackingData(trackingData)
+                    videoPlaybackController.start()
+
+                    Toast.makeText(
+                        this,
+                        "Processing complete! ${trackingData.size} frames processed",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onError = { error ->
+                runOnUiThread {
+                    processButton.text = "Process Video"
+                    videoPlaybackController.enablePlayButton(false)
+                    Toast.makeText(this, "Error: $error", Toast.LENGTH_LONG).show()
+                }
+            }
+        )
     }
+
 
     private fun stopProcessingAndPlayback() {
         // Stop video processing if in progress
