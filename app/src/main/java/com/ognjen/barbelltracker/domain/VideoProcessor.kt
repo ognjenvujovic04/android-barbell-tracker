@@ -6,7 +6,9 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.Frame
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.FrameExtractor
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.IVideoFrameExtractor
@@ -89,8 +91,22 @@ class VideoProcessor(
 
         isProcessing.set(true)
 
+        val processingStartMs = SystemClock.elapsedRealtime()
         // Frame extraction starts (callbacks fill trackingData)
         frameExtractor!!.extractFrames(videoPath)
+        val processingElapsedMs = SystemClock.elapsedRealtime() - processingStartMs
+
+        Log.i(
+            BARBELL_TRACKER_LOG_TAG,
+            "Video processing completed in ${processingElapsedMs} ms"
+        )
+        mainHandler.post {
+            Toast.makeText(
+                context,
+                "Processing took ${processingElapsedMs} ms",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
 
         return trackingData
     }
@@ -193,5 +209,6 @@ class VideoProcessor(
     companion object {
         const val TAG = "VideoProcessor"
         const val ERRORTAG = "VideoProcessorError"
+        const val BARBELL_TRACKER_LOG_TAG = "BarbelltrackerLog"
     }
 }
