@@ -4,7 +4,6 @@ import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -26,10 +25,8 @@ object Utils {
         val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         buffer.rewind()
         result.copyPixelsFromBuffer(buffer)
-        val transformMatrix = Matrix()
-        val outputBitmap = Bitmap.createBitmap(result, 0, 0, result.width, result.height, transformMatrix, false)
-        outputBitmap.density = DisplayMetrics.DENSITY_DEFAULT
-        return outputBitmap
+        result.density = DisplayMetrics.DENSITY_DEFAULT
+        return result
     }
 
 
