@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var processedVideoView: VideoView
     private lateinit var overlayView: OverlayView
-    private lateinit var boundingBoxTextView: TextView
+    private lateinit var speedGraphView: SpeedOverTimeGraphView
     private lateinit var loadFromGalleryButton: Button
     private lateinit var processButton: Button
     private lateinit var playButton: Button
@@ -83,7 +83,7 @@ class MainActivity : AppCompatActivity() {
         // Main views
         processedVideoView = findViewById(R.id.processedVideoView)
         overlayView = findViewById(R.id.overlay)
-        boundingBoxTextView = findViewById(R.id.boundingBoxTextView)
+        speedGraphView = findViewById(R.id.speedGraphView)
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
         processButton = findViewById(R.id.detectButton)
         playButton = findViewById(R.id.playButton)
@@ -106,7 +106,7 @@ class MainActivity : AppCompatActivity() {
         videoPlaybackController = VideoPlaybackController(
             processedVideoView,
             overlayView,
-            boundingBoxTextView,
+            speedGraphView,
             playButton
         )
 
