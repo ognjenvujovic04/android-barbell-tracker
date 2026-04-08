@@ -51,8 +51,8 @@ class VideoProcessor(
     private var currentFrameHeight: Int = 0
 
     private var lastTimeUs: Long? = null
-    private var lastCenterCmX: Float? = null
-    private var lastCenterCmY: Float? = null
+    private var lastSmoothedCenterCmX: Float? = null
+    private var lastSmoothedCenterCmY: Float? = null
 
     // Processing state
     private val isProcessing = AtomicBoolean(false)
@@ -92,8 +92,8 @@ class VideoProcessor(
         trackingData.clear()
         velocityByTimestampMs.clear()
         lastTimeUs = null
-        lastCenterCmX = null
-        lastCenterCmY = null
+        lastSmoothedCenterCmX = null
+        lastSmoothedCenterCmY = null
         processedFrames = 0
 
         val videoPath = Utils.getPath(context, videoUri)
@@ -224,8 +224,8 @@ class VideoProcessor(
 
     private fun resetVelocityChain() {
         lastTimeUs = null
-        lastCenterCmX = null
-        lastCenterCmY = null
+        lastSmoothedCenterCmX = null
+        lastSmoothedCenterCmY = null
     }
 
     private fun appendVelocityIfPossible(boxes: List<BoundingBox>, timestampMs: Long) {
@@ -243,8 +243,8 @@ class VideoProcessor(
         if (barPixelSpan < 1f) return
 
         val cmPerPixel = barDiameterCm / barPixelSpan
-        val cxCm = box.cx * fw * cmPerPixel
-        val cyCm = box.cy * fh * cmPerPixel
+        val rawCxCm = box.cx * fw * cmPerPixel
+        val rawCyCm = box.cy * fh * cmPerPixel
 
         val tUs = currentPresentationTimeUs
         val prevT0 = lastTimeUs
@@ -253,15 +253,26 @@ class VideoProcessor(
         }
 
         val prevT = lastTimeUs
-        val prevX = lastCenterCmX
-        val prevY = lastCenterCmY
+        val prevSmoothedX = lastSmoothedCenterCmX
+        val prevSmoothedY = lastSmoothedCenterCmY
 
-        if (prevT != null && prevX != null && prevY != null) {
+        // EMA on position before differencing: reduces velocity noise from bbox jitter.
+        val smoothedX: Float
+        val smoothedY: Float
+        if (prevSmoothedX == null || prevSmoothedY == null) {
+            smoothedX = rawCxCm
+            smoothedY = rawCyCm
+        } else {
+            smoothedX = POSITION_EMA_ALPHA * rawCxCm + (1f - POSITION_EMA_ALPHA) * prevSmoothedX
+            smoothedY = POSITION_EMA_ALPHA * rawCyCm + (1f - POSITION_EMA_ALPHA) * prevSmoothedY
+        }
+
+        if (prevT != null && prevSmoothedX != null && prevSmoothedY != null) {
             val dtUs = tUs - prevT
             if (dtUs > 0L) {
                 val dtSec = dtUs / 1_000_000f
-                val dxCm = cxCm - prevX
-                val dyCm = cyCm - prevY
+                val dxCm = smoothedX - prevSmoothedX
+                val dyCm = smoothedY - prevSmoothedY
                 val vx = dxCm / dtSec
                 val vy = dyCm / dtSec
                 val speed = hypot(vx.toDouble(), vy.toDouble()).toFloat()
@@ -278,8 +289,8 @@ class VideoProcessor(
         }
 
         lastTimeUs = tUs
-        lastCenterCmX = cxCm
-        lastCenterCmY = cyCm
+        lastSmoothedCenterCmX = smoothedX
+        lastSmoothedCenterCmY = smoothedY
     }
 
     override fun onFirstDetect(boundingBoxes: List<BoundingBox>) {
@@ -307,5 +318,11 @@ class VideoProcessor(
         const val DEFAULT_BAR_DIAMETER_CM = 45f
         /** Break velocity segments after this many µs without a sample (avoids one huge Δt spike). */
         private const val MAX_GAP_US = 1_000_000L
+
+        /**
+         * Weight of the new detection vs previous smoothed centre (0–1). Higher = follow the model more,
+         * lower = smoother curve (more lag). Typical range 0.25–0.55.
+         */
+        private const val POSITION_EMA_ALPHA = 0.4f
     }
 }
