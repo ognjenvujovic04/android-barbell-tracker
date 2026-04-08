@@ -15,6 +15,8 @@ import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.IVideoFrameExtra
 import com.ognjen.barbelltracker.domain.FastVideoFrameExtractor.Utils
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.hypot
+import kotlin.math.min
 
 /**
  * Isolated VideoProcessor class.
@@ -30,11 +32,27 @@ class VideoProcessor(
     // Internal State
     // =========================================================
     private val trackingData = mutableMapOf<Long, List<BoundingBox>>()
+    private val velocityByTimestampMs = mutableMapOf<Long, BarVelocitySample>()
     private val firstTrackingBoxes = mutableListOf<BoundingBox>()
     private var tracker: Tracker? = null
     private var frameExtractor: FrameExtractor? = null
 
     var selectedBarbellId: Int? = null
+
+    /**
+     * Physical bar shaft diameter in centimetres, used with the smaller bbox side in pixels
+     * to obtain cm/pixel (same idea for React Native: expose this as a numeric prop).
+     * Default matches product request; Olympic bar shafts are typically ~2.8 cm if you need that scale.
+     */
+    var barDiameterCm: Float = DEFAULT_BAR_DIAMETER_CM
+
+    private var currentPresentationTimeUs: Long = 0L
+    private var currentFrameWidth: Int = 0
+    private var currentFrameHeight: Int = 0
+
+    private var lastTimeUs: Long? = null
+    private var lastCenterCmX: Float? = null
+    private var lastCenterCmY: Float? = null
 
     // Processing state
     private val isProcessing = AtomicBoolean(false)
@@ -48,13 +66,13 @@ class VideoProcessor(
     fun processVideoAsync(
         uri: Uri,
         onProgress: (Int) -> Unit,
-        onComplete: (Map<Long, List<BoundingBox>>) -> Unit,
+        onComplete: (Map<Long, List<BoundingBox>>, Map<Long, BarVelocitySample>) -> Unit,
         onError: (String) -> Unit
     ) {
         executor.execute {
             try {
                 val result = processVideo(uri, onProgress)
-                mainHandler.post { onComplete(result) }
+                mainHandler.post { onComplete(result, velocityByTimestampMs.toMap()) }
             } catch (e: Exception) {
                 mainHandler.post { onError(e.message ?: "Unknown error") }
             }
@@ -72,6 +90,10 @@ class VideoProcessor(
         }
 
         trackingData.clear()
+        velocityByTimestampMs.clear()
+        lastTimeUs = null
+        lastCenterCmX = null
+        lastCenterCmY = null
         processedFrames = 0
 
         val videoPath = Utils.getPath(context, videoUri)
@@ -158,6 +180,10 @@ class VideoProcessor(
         if (!isProcessing.get()) return
 
         try {
+            currentPresentationTimeUs = presentationTimeUs
+            currentFrameWidth = currentFrame.width
+            currentFrameHeight = currentFrame.height
+
             reusableBitmap = Utils.fromBufferToBitmap(
                 currentFrame.byteBuffer,
                 currentFrame.width,
@@ -179,13 +205,81 @@ class VideoProcessor(
 
     override fun onDetect(boundingBoxes: List<BoundingBox>) {
         if (!isProcessing.get()) return
-        val timestamp = (processedFrames * 1000L) / 30L
-        trackingData[timestamp] = boundingBoxes
+        val timestampMs = currentPresentationTimeUs / 1000L
+        trackingData[timestampMs] = boundingBoxes
+        appendVelocityIfPossible(boundingBoxes, timestampMs)
     }
 
     override fun onEmptyDetect() {
-        val timestamp = (processedFrames * 1000L) / 30L
-        trackingData[timestamp] = emptyList()
+        val timestampMs = currentPresentationTimeUs / 1000L
+        trackingData[timestampMs] = emptyList()
+        resetVelocityChain()
+    }
+
+    private fun pickTrackedBox(boxes: List<BoundingBox>): BoundingBox? {
+        if (boxes.isEmpty()) return null
+        val id = selectedBarbellId ?: return boxes.first()
+        return boxes.firstOrNull { it.id == id } ?: boxes.first()
+    }
+
+    private fun resetVelocityChain() {
+        lastTimeUs = null
+        lastCenterCmX = null
+        lastCenterCmY = null
+    }
+
+    private fun appendVelocityIfPossible(boxes: List<BoundingBox>, timestampMs: Long) {
+        val box = pickTrackedBox(boxes) ?: run {
+            resetVelocityChain()
+            return
+        }
+        val fw = currentFrameWidth.toFloat()
+        val fh = currentFrameHeight.toFloat()
+        if (fw <= 0f || fh <= 0f || barDiameterCm <= 0f) return
+
+        val wPx = box.w * fw
+        val hPx = box.h * fh
+        val barPixelSpan = min(wPx, hPx)
+        if (barPixelSpan < 1f) return
+
+        val cmPerPixel = barDiameterCm / barPixelSpan
+        val cxCm = box.cx * fw * cmPerPixel
+        val cyCm = box.cy * fh * cmPerPixel
+
+        val tUs = currentPresentationTimeUs
+        val prevT0 = lastTimeUs
+        if (prevT0 != null && (tUs - prevT0) > MAX_GAP_US) {
+            resetVelocityChain()
+        }
+
+        val prevT = lastTimeUs
+        val prevX = lastCenterCmX
+        val prevY = lastCenterCmY
+
+        if (prevT != null && prevX != null && prevY != null) {
+            val dtUs = tUs - prevT
+            if (dtUs > 0L) {
+                val dtSec = dtUs / 1_000_000f
+                val dxCm = cxCm - prevX
+                val dyCm = cyCm - prevY
+                val vx = dxCm / dtSec
+                val vy = dyCm / dtSec
+                val speed = hypot(vx.toDouble(), vy.toDouble()).toFloat()
+                val segment = hypot(dxCm.toDouble(), dyCm.toDouble()).toFloat()
+                velocityByTimestampMs[timestampMs] = BarVelocitySample(
+                    timestampMs = timestampMs,
+                    dtSeconds = dtSec,
+                    vxCmPerS = vx,
+                    vyCmPerS = vy,
+                    speedCmPerS = speed,
+                    segmentPathCm = segment,
+                )
+            }
+        }
+
+        lastTimeUs = tUs
+        lastCenterCmX = cxCm
+        lastCenterCmY = cyCm
     }
 
     override fun onFirstDetect(boundingBoxes: List<BoundingBox>) {
@@ -210,5 +304,8 @@ class VideoProcessor(
         const val TAG = "VideoProcessor"
         const val ERRORTAG = "VideoProcessorError"
         const val BARBELL_TRACKER_LOG_TAG = "BarbelltrackerLog"
+        const val DEFAULT_BAR_DIAMETER_CM = 45f
+        /** Break velocity segments after this many µs without a sample (avoids one huge Δt spike). */
+        private const val MAX_GAP_US = 1_000_000L
     }
 }

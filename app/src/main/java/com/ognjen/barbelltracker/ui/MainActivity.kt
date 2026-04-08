@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadFromGalleryButton: Button
     private lateinit var processButton: Button
     private lateinit var playButton: Button
+    private lateinit var barDiameterCmEdit: EditText
 
     private lateinit var popupContainer: ConstraintLayout
     private lateinit var button1: Button
@@ -85,6 +87,7 @@ class MainActivity : AppCompatActivity() {
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
         processButton = findViewById(R.id.detectButton)
         playButton = findViewById(R.id.playButton)
+        barDiameterCmEdit = findViewById(R.id.barDiameterCmEdit)
 
         // Popup views
         popupContainer = findViewById(R.id.popupContainer)
@@ -182,6 +185,10 @@ class MainActivity : AppCompatActivity() {
         processButton.text = "Processing..."
         videoPlaybackController.enablePlayButton(false)
 
+        val diameterCm = barDiameterCmEdit.text.toString().toFloatOrNull()?.takeIf { it > 0f }
+            ?: VideoProcessor.DEFAULT_BAR_DIAMETER_CM
+        videoProcessor.barDiameterCm = diameterCm
+
         videoProcessor.processVideoAsync(
             uri = uri,
             onProgress = { progress ->
@@ -190,13 +197,14 @@ class MainActivity : AppCompatActivity() {
                     processButton.text = "Processing $progress%"
                 }
             },
-            onComplete = { trackingData ->
+            onComplete = { trackingData, velocityData ->
                 runOnUiThread {
                     processButton.text = "Process Video"
                     videoPlaybackController.enablePlayButton(true)
 
                     overlayView.setSelectedBarbellId(videoProcessor.selectedBarbellId)
                     videoPlaybackController.setTrackingData(trackingData)
+                    videoPlaybackController.setVelocityData(velocityData)
                     videoPlaybackController.start()
 
                     Toast.makeText(

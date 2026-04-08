@@ -8,6 +8,7 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
+import com.ognjen.barbelltracker.domain.BarVelocitySample
 import com.ognjen.barbelltracker.domain.BoundingBox
 import kotlin.math.abs
 
@@ -25,6 +26,7 @@ class VideoPlaybackController(
 
     private var selectedVideoUri: Uri? = null
     private var trackingData: Map<Long, List<BoundingBox>> = emptyMap()
+    private var velocityData: Map<Long, BarVelocitySample> = emptyMap()
 
     init {
         setupPlayButton()
@@ -49,8 +51,13 @@ class VideoPlaybackController(
         trackingData = data
     }
 
+    fun setVelocityData(data: Map<Long, BarVelocitySample>) {
+        velocityData = data
+    }
+
     fun clearTrackingData() {
         trackingData = emptyMap()
+        velocityData = emptyMap()
     }
 
     fun clearOverlay() {
@@ -109,11 +116,13 @@ class VideoPlaybackController(
                 if (!isPlaying) return
 
                 val videoPosition = processedVideoView.currentPosition.toLong()
-                val closestTimestamp = findClosestTimestamp(videoPosition)
+                val closestTimestamp = findClosestTimestamp(videoPosition, trackingData.keys)
                 val boxes = trackingData[closestTimestamp]
+                val velocityTimestamp = findClosestTimestamp(videoPosition, velocityData.keys)
+                val velocitySample = velocityData[velocityTimestamp]
 
                 if (!boxes.isNullOrEmpty()) {
-                    updateOverlay(boxes)
+                    updateOverlay(boxes, velocitySample)
                 } else {
                     overlayView.clear()
                 }
@@ -125,13 +134,13 @@ class VideoPlaybackController(
         handler.post(playbackRunnable!!)
     }
 
-    private fun findClosestTimestamp(targetTime: Long): Long {
-        if (trackingData.isEmpty()) return 0L
+    private fun findClosestTimestamp(targetTime: Long, keys: Set<Long>): Long {
+        if (keys.isEmpty()) return 0L
 
-        var closestTime = trackingData.keys.first()
+        var closestTime = keys.first()
         var smallestDiff = abs(targetTime - closestTime)
 
-        for (timestamp in trackingData.keys) {
+        for (timestamp in keys) {
             val diff = abs(targetTime - timestamp)
             if (diff < smallestDiff) {
                 smallestDiff = diff
@@ -143,10 +152,22 @@ class VideoPlaybackController(
     }
 
     @SuppressLint("SetTextI19n")
-    private fun updateOverlay(boundingBoxes: List<BoundingBox>) {
+    private fun updateOverlay(boundingBoxes: List<BoundingBox>, velocity: BarVelocitySample?) {
         overlayView.setResults(boundingBoxes)
 
         val detectionTextBuilder = StringBuilder()
+
+        if (velocity != null) {
+            detectionTextBuilder.append(
+                """
+                Velocity (raw, cm/s):
+                t=${velocity.timestampMs} ms  dt=${velocity.dtSeconds.format(4)} s
+                vx=${velocity.vxCmPerS.format(2)}  vy=${velocity.vyCmPerS.format(2)}  |v|=${velocity.speedCmPerS.format(2)}
+                segment=${velocity.segmentPathCm.format(2)} cm (centre displacement over dt)
+                --------------------------
+                """.trimIndent()
+            ).append("\n")
+        }
 
         boundingBoxes.forEachIndexed { index, boundingBox ->
             val bboxText = """
