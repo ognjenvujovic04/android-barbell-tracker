@@ -3,6 +3,7 @@ package com.ognjen.barbelltracker.ui
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
@@ -12,6 +13,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.ognjen.barbelltracker.R
 import com.ognjen.barbelltracker.domain.VideoProcessor
 import org.opencv.android.OpenCVLoader
@@ -44,12 +48,25 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        applyTopSystemInsetsToControls()
 
         initializeOpenCV()
         initializeViews()
         initializeComponents()
         setupButtonListeners()
         setDefaultVideoFromAssets()
+    }
+
+    private fun applyTopSystemInsetsToControls() {
+        val controls = findViewById<View>(R.id.buttonLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(controls) { view, insets ->
+            val topInsetTypes =
+                WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()
+            val safe = insets.getInsets(topInsetTypes)
+            view.updatePadding(top = safe.top, left = safe.left, right = safe.right)
+            insets
+        }
+        ViewCompat.requestApplyInsets(controls)
     }
 
     private fun initializeOpenCV() {
