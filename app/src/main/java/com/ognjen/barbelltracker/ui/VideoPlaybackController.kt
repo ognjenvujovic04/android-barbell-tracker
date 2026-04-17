@@ -4,12 +4,16 @@ import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
+import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.Toast
 import android.widget.VideoView
 import com.ognjen.barbelltracker.domain.BarVelocitySample
 import com.ognjen.barbelltracker.domain.BoundingBox
 import kotlin.math.abs
+import kotlin.math.min
 
 class VideoPlaybackController(
     private val processedVideoView: VideoView,
@@ -25,6 +29,15 @@ class VideoPlaybackController(
     private var selectedVideoUri: Uri? = null
     private var trackingData: Map<Long, List<BoundingBox>> = emptyMap()
 
+    /** From last [VideoView.setOnPreparedListener]; used to re-fit after layout. */
+    private var preparedVideoWidth: Int = 0
+    private var preparedVideoHeight: Int = 0
+
+    private val videoContainer: FrameLayout?
+        get() = processedVideoView.parent as? FrameLayout
+
+    private var containerLayoutListener: View.OnLayoutChangeListener? = null
+
     init {
         setupPlayButton()
     }
@@ -35,10 +48,60 @@ class VideoPlaybackController(
         }
     }
 
+    
+    private fun applyCenteredFitVideoSize() {
+        val parent = videoContainer ?: return
+        val vw = preparedVideoWidth
+        val vh = preparedVideoHeight
+        if (vw <= 0 || vh <= 0) return
+        val pw = parent.width
+        val ph = parent.height
+        if (pw <= 0 || ph <= 0) return
+        val scale = min(pw.toFloat() / vw, ph.toFloat() / vh)
+        val w = (vw * scale).toInt().coerceAtLeast(1)
+        val h = (vh * scale).toInt().coerceAtLeast(1)
+        val lp = FrameLayout.LayoutParams(w, h).apply {
+            gravity = Gravity.CENTER
+        }
+        processedVideoView.layoutParams = lp
+        overlayView.setSourceVideoSize(vw, vh)
+    }
+
     fun setVideoUri(uri: Uri?) {
         selectedVideoUri = uri
+        preparedVideoWidth = 0
+        preparedVideoHeight = 0
+        videoContainer?.let { c ->
+            containerLayoutListener?.let { c.removeOnLayoutChangeListener(it) }
+        }
+        containerLayoutListener = null
+
         if (uri != null) {
             processedVideoView.setVideoURI(uri)
+            processedVideoView.setOnPreparedListener { mp ->
+                preparedVideoWidth = mp.videoWidth
+                preparedVideoHeight = mp.videoHeight
+                processedVideoView.post {
+                    applyCenteredFitVideoSize()
+                }
+                val container = videoContainer
+                if (container != null) {
+                    containerLayoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                        if (preparedVideoWidth > 0 && preparedVideoHeight > 0) {
+                            applyCenteredFitVideoSize()
+                        }
+                    }
+                    container.addOnLayoutChangeListener(containerLayoutListener!!)
+                }
+            }
+        } else {
+            val lp = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+            processedVideoView.layoutParams = lp
         }
         stop()
         clearOverlay()
@@ -156,5 +219,9 @@ class VideoPlaybackController(
         playbackRunnable?.let {
             handler.removeCallbacks(it)
         }
+        videoContainer?.let { c ->
+            containerLayoutListener?.let { c.removeOnLayoutChangeListener(it) }
+        }
+        containerLayoutListener = null
     }
 }

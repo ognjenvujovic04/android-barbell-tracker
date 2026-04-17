@@ -1,5 +1,6 @@
 package com.ognjen.barbelltracker.ui
 
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -148,7 +149,7 @@ class MainActivity : AppCompatActivity() {
 
     private val pickMedia = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
+        ) { uri: Uri? ->
         if (uri != null) {
             Log.d(TAG, "Selected URI: $uri")
             selectedVideoUri = uri
@@ -158,6 +159,7 @@ class MainActivity : AppCompatActivity() {
 
             // Set the video to playback controller
             videoPlaybackController.setVideoUri(uri)
+            applyVideoMetadataToOverlay(uri)
 
             // Reset tracking data
             videoPlaybackController.clearTrackingData()
@@ -174,6 +176,31 @@ class MainActivity : AppCompatActivity() {
         pickMedia.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
         )
+    }
+
+    private fun applyVideoMetadataToOverlay(uri: Uri) {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(this, uri)
+            val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rot = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            // Display size matches VideoView / rotated playback (same idea as FrameExtractor portrait swap).
+            var displayW = w
+            var displayH = h
+            if (rot == 90 || rot == 270) {
+                displayW = h
+                displayH = w
+            }
+            overlayView.setSourceVideoSize(displayW, displayH)
+        } catch (e: Exception) {
+            Log.e(ERRORTAG, "Video metadata: ${e.message}")
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {
+            }
+        }
     }
     private fun processVideo() {
         val uri = selectedVideoUri
@@ -249,6 +276,7 @@ class MainActivity : AppCompatActivity() {
 
             // Set the video to playback controller
             videoPlaybackController.setVideoUri(uri)
+            applyVideoMetadataToOverlay(uri)
 
             // Enable process button
             processButton.isEnabled = true

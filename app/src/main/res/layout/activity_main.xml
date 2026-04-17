@@ -91,8 +91,8 @@
             android:text="0%" />
     </LinearLayout>
 
-    <!-- Video Views -->
-    <RelativeLayout
+    <!-- Video Views: FrameLayout so VideoView can be sized to aspect-fit and centered -->
+    <FrameLayout
         android:id="@+id/videoContainer"
         android:layout_width="match_parent"
         app:layout_constraintDimensionRatio="1:1"
@@ -104,16 +104,13 @@
             android:id="@+id/processedVideoView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentTop="true" />
+            android:layout_gravity="center" />
 
         <com.ognjen.barbelltracker.ui.OverlayView
             android:id="@+id/overlay"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentTop="true" />
-    </RelativeLayout>
+            android:layout_height="match_parent" />
+    </FrameLayout>
 
     <!-- Speed vs time (approximate |v| from detections) -->
     <com.ognjen.barbelltracker.ui.SpeedOverTimeGraphView

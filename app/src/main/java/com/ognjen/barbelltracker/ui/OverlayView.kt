@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.Rect
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
@@ -33,8 +34,44 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     private var selectedBarbellId: Int? = null
 
+    /** Pixel size of the source video (from metadata); 0 if unknown. */
+    private var sourceVideoWidth: Int = 0
+    private var sourceVideoHeight: Int = 0
+
     fun setSelectedBarbellId(id: Int?) {
         selectedBarbellId = id
+    }
+
+    fun setSourceVideoSize(widthPx: Int, heightPx: Int) {
+        sourceVideoWidth = widthPx
+        sourceVideoHeight = heightPx
+    }
+
+    private fun fitCenterContentRect(): RectF {
+        val vw = width.toFloat()
+        val vh = height.toFloat()
+        if (sourceVideoWidth <= 0 || sourceVideoHeight <= 0 || vw <= 0f || vh <= 0f) {
+            return RectF(0f, 0f, vw, vh)
+        }
+        val iw = sourceVideoWidth.toFloat()
+        val ih = sourceVideoHeight.toFloat()
+        val scale = minOf(vw / iw, vh / ih)
+        val sw = iw * scale
+        val sh = ih * scale
+        val left = (vw - sw) / 2f
+        val top = (vh - sh) / 2f
+        return RectF(left, top, left + sw, top + sh)
+    }
+
+    /** Normalized box (0–1 in source frame) → screen rect inside [fitCenterContentRect]. */
+    private fun mapNormalizedBoxToScreen(box: BoundingBox): RectF {
+        val c = fitCenterContentRect()
+        return RectF(
+            c.left + box.x1 * c.width(),
+            c.top + box.y1 * c.height(),
+            c.left + box.x2 * c.width(),
+            c.top + box.y2 * c.height()
+        )
     }
 
     init {
@@ -81,12 +118,13 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
 
-        // Draw bounding boxes
+        // Draw bounding boxes 
         results.forEach {
-            val left = it.x1 * width
-            val top = it.y1 * height
-            val right = it.x2 * width
-            val bottom = it.y2 * height
+            val r = mapNormalizedBoxToScreen(it)
+            val left = r.left
+            val top = r.top
+            val right = r.right
+            val bottom = r.bottom
 
             canvas.drawRect(left, top, right, bottom, boxPaint)
             val drawableText = "ID: " + it.id.toString()
@@ -153,9 +191,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         if (boundingBoxes.isNotEmpty()) {
             val mainBox = boundingBoxes[0] // or filter by specific ID if needed
 
-            // Calculate center point in screen coordinates
-            val centerX = (mainBox.x1 + mainBox.x2) / 2 * width
-            val centerY = (mainBox.y1 + mainBox.y2) / 2 * height
+            val r = mapNormalizedBoxToScreen(mainBox)
+            val centerX = r.centerX()
+            val centerY = r.centerY()
 
             // Add to center points list
             centerPoints.add(PointF(centerX, centerY))
