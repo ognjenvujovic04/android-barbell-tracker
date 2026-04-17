@@ -8,10 +8,14 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
 import com.ognjen.barbelltracker.domain.BarVelocitySample
 import com.ognjen.barbelltracker.domain.BoundingBox
+import com.ognjen.barbelltracker.domain.MovementPhaseAnalyzer
+import com.ognjen.barbelltracker.domain.PhaseDirection
+import com.ognjen.barbelltracker.domain.PhaseSegment
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -19,6 +23,8 @@ class VideoPlaybackController(
     private val processedVideoView: VideoView,
     private val overlayView: OverlayView,
     private val speedGraphView: SpeedOverTimeGraphView,
+    private val movementPhaseStripView: MovementPhaseStripView,
+    private val phaseMetricsText: TextView?,
     private val playButton: Button
 ) {
 
@@ -112,17 +118,50 @@ class VideoPlaybackController(
     }
 
     fun setVelocityData(data: Map<Long, BarVelocitySample>) {
-        speedGraphView.setSeries(data.values.toList())
+        val samples = data.values.toList()
+        speedGraphView.setSeries(samples)
+        if (samples.isEmpty()) {
+            movementPhaseStripView.clear()
+            hidePhaseMetrics()
+            return
+        }
+        val segments = MovementPhaseAnalyzer.buildSegments(samples)
+        val t0 = samples.minOf { it.timestampMs }
+        val t1 = samples.maxOf { it.timestampMs }
+        movementPhaseStripView.setPhaseData(segments, t0, t1)
+        updatePhaseMetrics(segments)
     }
 
     fun clearTrackingData() {
         trackingData = emptyMap()
         speedGraphView.clear()
+        movementPhaseStripView.clear()
+        hidePhaseMetrics()
     }
 
     fun clearOverlay() {
         overlayView.clear()
         speedGraphView.clear()
+        movementPhaseStripView.clear()
+        hidePhaseMetrics()
+    }
+
+    private fun hidePhaseMetrics() {
+        phaseMetricsText?.visibility = View.GONE
+    }
+
+    private fun updatePhaseMetrics(segments: List<PhaseSegment>) {
+        val tv = phaseMetricsText ?: return
+        if (segments.isEmpty()) {
+            tv.visibility = View.GONE
+            return
+        }
+        val reps = MovementPhaseAnalyzer.estimateRepCount(segments)
+        val upS = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.UP) / 1000f
+        val downS = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.DOWN) / 1000f
+        val holdS = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.STATIONARY) / 1000f
+        tv.text = "Reps: $reps · Up %.1f s · Down %.1f s · Hold %.1f s".format(upS, downS, holdS)
+        tv.visibility = View.VISIBLE
     }
 
     fun enablePlayButton(enabled: Boolean) {
@@ -176,6 +215,7 @@ class VideoPlaybackController(
 
                 val videoPosition = processedVideoView.currentPosition.toLong()
                 speedGraphView.setPlaybackPositionMs(videoPosition)
+                movementPhaseStripView.setPlaybackPositionMs(videoPosition)
 
                 val closestTimestamp = findClosestTimestamp(videoPosition, trackingData.keys)
                 val boxes = trackingData[closestTimestamp]

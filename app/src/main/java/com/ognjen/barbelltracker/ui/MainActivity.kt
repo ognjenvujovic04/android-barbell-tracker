@@ -30,6 +30,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var processedVideoView: VideoView
     private lateinit var overlayView: OverlayView
     private lateinit var speedGraphView: SpeedOverTimeGraphView
+    private lateinit var movementPhaseStripView: MovementPhaseStripView
+    private lateinit var phaseMetricsText: TextView
     private lateinit var loadFromGalleryButton: Button
     private lateinit var processButton: Button
     private lateinit var playButton: Button
@@ -85,6 +87,8 @@ class MainActivity : AppCompatActivity() {
         processedVideoView = findViewById(R.id.processedVideoView)
         overlayView = findViewById(R.id.overlay)
         speedGraphView = findViewById(R.id.speedGraphView)
+        movementPhaseStripView = findViewById(R.id.movementPhaseStripView)
+        phaseMetricsText = findViewById(R.id.phaseMetricsText)
         loadFromGalleryButton = findViewById(R.id.loadFromGalleryButton)
         processButton = findViewById(R.id.detectButton)
         playButton = findViewById(R.id.playButton)
@@ -108,6 +112,8 @@ class MainActivity : AppCompatActivity() {
             processedVideoView,
             overlayView,
             speedGraphView,
+            movementPhaseStripView,
+            phaseMetricsText,
             playButton
         )
 

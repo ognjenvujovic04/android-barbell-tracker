@@ -84,10 +84,10 @@ class SpeedOverTimeGraphView @JvmOverloads constructor(
     private fun rebuildPath() {
         chartPath.reset()
         if (series.size < 2) return
-        val padL = 42f * density
-        val padR = 12f * density
-        val padT = 14f * density
-        val padB = 28f * density
+        val padL = ChartGeometry.padLeftPx(resources)
+        val padR = ChartGeometry.padRightPx(resources)
+        val padT = ChartGeometry.padTopPx(resources)
+        val padB = ChartGeometry.padBottomPx(resources)
         val w = width.toFloat()
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
@@ -116,10 +116,10 @@ class SpeedOverTimeGraphView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
-        val padL = 42f * density
-        val padR = 12f * density
-        val padT = 14f * density
-        val padB = 28f * density
+        val padL = ChartGeometry.padLeftPx(resources)
+        val padR = ChartGeometry.padRightPx(resources)
+        val padT = ChartGeometry.padTopPx(resources)
+        val padB = ChartGeometry.padBottomPx(resources)
         val left = padL
         val right = width - padR
         val top = padT
