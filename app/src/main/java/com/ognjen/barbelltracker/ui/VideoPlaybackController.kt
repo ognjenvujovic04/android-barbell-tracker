@@ -11,11 +11,8 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
-import com.ognjen.barbelltracker.domain.BarVelocitySample
 import com.ognjen.barbelltracker.domain.BoundingBox
-import com.ognjen.barbelltracker.domain.MovementPhaseAnalyzer
-import com.ognjen.barbelltracker.domain.PhaseDirection
-import com.ognjen.barbelltracker.domain.PhaseSegment
+import com.ognjen.barbelltracker.domain.VideoProcessingResult
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -117,19 +114,25 @@ class VideoPlaybackController(
         trackingData = data
     }
 
-    fun setVelocityData(data: Map<Long, BarVelocitySample>) {
-        val samples = data.values.toList()
-        speedGraphView.setSeries(samples)
-        if (samples.isEmpty()) {
+    /**
+     * Feed the precomputed [VideoProcessingResult] from [com.ognjen.barbelltracker.domain.VideoProcessor]
+     * into the UI. No additional analysis is performed here — this is the same shape a React Native
+     * bridge would receive.
+     */
+    fun setProcessingResult(result: VideoProcessingResult) {
+        trackingData = result.trackingData
+        speedGraphView.setSeries(result.velocitySamples.values.toList())
+        if (result.phaseSegments.isEmpty()) {
             movementPhaseStripView.clear()
             hidePhaseMetrics()
             return
         }
-        val segments = MovementPhaseAnalyzer.buildSegments(samples)
-        val t0 = samples.minOf { it.timestampMs }
-        val t1 = samples.maxOf { it.timestampMs }
-        movementPhaseStripView.setPhaseData(segments, t0, t1)
-        updatePhaseMetrics(segments)
+        movementPhaseStripView.setPhaseData(
+            result.phaseSegments,
+            result.startTimestampMs,
+            result.endTimestampMs
+        )
+        updatePhaseMetrics(result)
     }
 
     fun clearTrackingData() {
@@ -150,17 +153,17 @@ class VideoPlaybackController(
         phaseMetricsText?.visibility = View.GONE
     }
 
-    private fun updatePhaseMetrics(segments: List<PhaseSegment>) {
+    private fun updatePhaseMetrics(result: VideoProcessingResult) {
         val tv = phaseMetricsText ?: return
-        if (segments.isEmpty()) {
+        if (result.phaseSegments.isEmpty()) {
             tv.visibility = View.GONE
             return
         }
-        val reps = MovementPhaseAnalyzer.estimateRepCount(segments)
-        val upS = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.UP) / 1000f
-        val downS = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.DOWN) / 1000f
-        val holdS = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.STATIONARY) / 1000f
-        tv.text = "Reps: $reps · Up %.1f s · Down %.1f s · Hold %.1f s".format(upS, downS, holdS)
+        val upS = result.upDurationMs / 1000f
+        val downS = result.downDurationMs / 1000f
+        val holdS = result.stationaryDurationMs / 1000f
+        tv.text = "Reps: ${result.repCount} · Up %.1f s · Down %.1f s · Hold %.1f s"
+            .format(upS, downS, holdS)
         tv.visibility = View.VISIBLE
     }
 

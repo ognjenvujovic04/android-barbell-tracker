@@ -19,6 +19,23 @@ import kotlin.math.hypot
 import kotlin.math.min
 
 /**
+ * Single result object returned by [VideoProcessor]. Contains everything a consumer
+ * (native UI or a React Native bridge) needs to render overlays, graphs and metrics
+ * without having to run any further analysis.
+ */
+data class VideoProcessingResult(
+    val trackingData: Map<Long, List<BoundingBox>>,
+    val velocitySamples: Map<Long, BarVelocitySample>,
+    val phaseSegments: List<PhaseSegment>,
+    val repCount: Int,
+    val upDurationMs: Long,
+    val downDurationMs: Long,
+    val stationaryDurationMs: Long,
+    val startTimestampMs: Long,
+    val endTimestampMs: Long,
+)
+
+/**
  * Isolated VideoProcessor class.
  *
  * Works standalone in Kotlin and is ready for bridging to React Native.
@@ -66,27 +83,27 @@ class VideoProcessor(
     fun processVideoAsync(
         uri: Uri,
         onProgress: (Int) -> Unit,
-        onComplete: (Map<Long, List<BoundingBox>>, Map<Long, BarVelocitySample>) -> Unit,
+        onComplete: (VideoProcessingResult) -> Unit,
         onError: (String) -> Unit
     ) {
         executor.execute {
             try {
                 val result = processVideo(uri, onProgress)
-                mainHandler.post { onComplete(result, velocityByTimestampMs.toMap()) }
+                mainHandler.post { onComplete(result) }
             } catch (e: Exception) {
                 mainHandler.post { onError(e.message ?: "Unknown error") }
             }
         }
     }
 
-    private fun processVideo(
+    fun processVideo(
         videoUri: Uri,
         onProgress: ((Int) -> Unit)? = null
-    ): Map<Long, List<BoundingBox>> {
+    ): VideoProcessingResult {
 
         if (isProcessing.get()) {
             Log.w(TAG, "Already processing video")
-            return emptyMap()
+            return EMPTY_RESULT
         }
 
         trackingData.clear()
@@ -114,7 +131,7 @@ class VideoProcessor(
         isProcessing.set(true)
 
         val processingStartMs = SystemClock.elapsedRealtime()
-        // Frame extraction starts (callbacks fill trackingData)
+        // Frame extraction starts (callbacks fill trackingData + velocityByTimestampMs)
         frameExtractor!!.extractFrames(videoPath)
         val processingElapsedMs = SystemClock.elapsedRealtime() - processingStartMs
 
@@ -130,7 +147,45 @@ class VideoProcessor(
             ).show()
         }
 
-        return trackingData
+        return buildResult()
+    }
+
+    /**
+     * Runs phase analysis on the samples collected during tracking and packages the full
+     * result. Kept as a single place so both sync and async entry points emit the same
+     * shape, which keeps the React Native bridge trivial (one callback, one JSON payload).
+     */
+    private fun buildResult(): VideoProcessingResult {
+        val trackingSnapshot = trackingData.toMap()
+        val velocitySnapshot = velocityByTimestampMs.toMap()
+        val samples = velocitySnapshot.values.toList()
+
+        if (samples.isEmpty()) {
+            return VideoProcessingResult(
+                trackingData = trackingSnapshot,
+                velocitySamples = velocitySnapshot,
+                phaseSegments = emptyList(),
+                repCount = 0,
+                upDurationMs = 0L,
+                downDurationMs = 0L,
+                stationaryDurationMs = 0L,
+                startTimestampMs = 0L,
+                endTimestampMs = 0L,
+            )
+        }
+
+        val segments = MovementPhaseAnalyzer.buildSegments(samples)
+        return VideoProcessingResult(
+            trackingData = trackingSnapshot,
+            velocitySamples = velocitySnapshot,
+            phaseSegments = segments,
+            repCount = MovementPhaseAnalyzer.estimateRepCount(segments),
+            upDurationMs = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.UP),
+            downDurationMs = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.DOWN),
+            stationaryDurationMs = MovementPhaseAnalyzer.totalPhaseDurationMs(segments, PhaseDirection.STATIONARY),
+            startTimestampMs = samples.minOf { it.timestampMs },
+            endTimestampMs = samples.maxOf { it.timestampMs },
+        )
     }
 
     fun firstFrame(videoUri: Uri): Bitmap? {
@@ -318,6 +373,18 @@ class VideoProcessor(
         const val DEFAULT_BAR_DIAMETER_CM = 45f
         /** Break velocity segments after this many µs without a sample (avoids one huge Δt spike). */
         private const val MAX_GAP_US = 1_000_000L
+
+        private val EMPTY_RESULT = VideoProcessingResult(
+            trackingData = emptyMap(),
+            velocitySamples = emptyMap(),
+            phaseSegments = emptyList(),
+            repCount = 0,
+            upDurationMs = 0L,
+            downDurationMs = 0L,
+            stationaryDurationMs = 0L,
+            startTimestampMs = 0L,
+            endTimestampMs = 0L,
+        )
 
         /**
          * Weight of the new detection vs previous smoothed centre (0–1). Higher = follow the model more,

@@ -230,19 +230,18 @@ class MainActivity : AppCompatActivity() {
                     processButton.text = "Processing $progress%"
                 }
             },
-            onComplete = { trackingData, velocityData ->
+            onComplete = { result ->
                 runOnUiThread {
                     processButton.text = "Process Video"
                     videoPlaybackController.enablePlayButton(true)
 
                     overlayView.setSelectedBarbellId(videoProcessor.selectedBarbellId)
-                    videoPlaybackController.setTrackingData(trackingData)
-                    videoPlaybackController.setVelocityData(velocityData)
+                    videoPlaybackController.setProcessingResult(result)
                     videoPlaybackController.start()
 
                     Toast.makeText(
                         this,
-                        "Processing complete! ${trackingData.size} frames processed",
+                        "Processing complete! ${result.trackingData.size} frames processed",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
